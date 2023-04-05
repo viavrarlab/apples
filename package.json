@@ -1,0 +1,26 @@
+{
+  "name": "apples",
+  "version": "1.0.0",
+  "description": "",
+  "main": "js/index.js",
+  "scripts": {
+    "start": "parcel js/index.html --port 3000",
+    "build": "parcel build --public-url . js/index.html"
+  },
+  "author": "Zintis Erics",
+  "license": "MIT",
+  "dependencies": {
+    "@techstark/opencv-js": "^4.7.0-release.1",
+    "onnxruntime-web": "^1.14.0"
+  },
+  "devDependencies": {
+    "parcel-bundler": "^1.12.5",
+    "parcel-plugin-static-files-copy": "^2.6.0"
+  },
+  "staticFiles": {
+    "staticPath": [
+      "node_modules/onnxruntime-web/dist/ort-wasm-simd.wasm",
+      "output/qat_faster_rcnn_fbnetv3a_C4_both/model.onnx"
+    ]
+  }
+}
