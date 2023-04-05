@@ -1,0 +1,35 @@
+autodetect: false
+strictness: none
+doc-warnings: false
+test-warnings: true
+member-warnings: true
+
+ignore-paths:
+  - dist
+  - conda
+  - node_modules
+  - output
+  - data
+
+pycodestyle:
+  options:
+    max-line-length: 165
+  disable:
+    - E261 # at least two spaces before inline comment
+
+pylint:
+  options:
+    max-line-length: 165
+    argument-rgx: "[a-z_][a-z0-9_]{,30}$"
+    variable-rgx: "[a-z_][a-z0-9_]{,30}$"
+  disable:
+    - too-many-arguments
+    - too-many-locals
+    - too-many-branches
+    - too-many-statements
+
+pyflakes:
+  run: false
+
+mccabe:
+  run: false
