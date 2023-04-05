@@ -1,0 +1,18 @@
+# python
+
+__pycache__
+
+# javascript
+
+.cache
+dist
+
+# environment
+
+conda
+node_modules
+
+# generated
+
+output
+data
