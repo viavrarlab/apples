@@ -4,8 +4,12 @@
   "description": "",
   "main": "js/index.js",
   "scripts": {
-    "start": "parcel js/index.html --port 3000",
-    "build": "parcel build --public-url . js/index.html"
+    "parcel-start": "bash scripts/parcel-start.sh",
+    "parcel-build": "bash scripts/parcel-build.sh",
+    "pages-init": "bash scripts/pages-init.sh",
+    "pages-pub": "bash scripts/pages-pub.sh",
+    "pages-del": "bash scripts/pages-del.sh",
+    "pages": "bash scripts/pages.sh"
   },
   "author": "Zintis Erics",
   "license": "MIT",
