@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
-git fetch origin
-git fetch hub
 mkdir ../apples-temp
 cp -r .git ../apples-temp/.git
 cd ../apples-temp
 git checkout pages
+git pull origin pages
+git pull hub pages
 mkdir ../apples-pages
 cp -r .git ../apples-pages/.git
 cd ../apples-pages
