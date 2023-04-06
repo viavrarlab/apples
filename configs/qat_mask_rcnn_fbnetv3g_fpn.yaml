@@ -1,9 +1,0 @@
-_BASE_: "mask_rcnn_fbnetv3g_fpn.yaml"
-QUANTIZATION:
-  BACKEND: "qnnpack"
-  QAT:
-    ENABLED: True
-    START_ITER: 0
-    ENABLE_OBSERVER_ITER: 0
-    DISABLE_OBSERVER_ITER: 10000
-    FREEZE_BN_ITER: 10000
