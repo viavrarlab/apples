@@ -13,6 +13,7 @@
         <div style="grid-row: 1 / span 4;">
             <img id="img" crossorigin="anonymous" hidden="true" />
             <video id="video" crossorigin="anonymous" hidden="true" controls="true" loop="true"></video>
+            <canvas id="canvas" hidden="true"></canvas>
         </div>
         <div class="right">
             <label for="input-file">Upload from computer - </label>
@@ -39,8 +40,8 @@
         <div>
             <input id="input-loop" type="checkbox" checked="true" disabled="true" />
         </div>
-        <div style="grid-row: 5 / span 3;">
-            <canvas id="canvas"></canvas>
+        <div style="grid-row: 5 / span 4;">
+            <canvas id="output-initial"></canvas>
         </div>
         <div class="right">
             <label for="input-width">Width - </label>
@@ -59,6 +60,14 @@
         </div>
         <div>
             <input id="input-fps" type="number" value="0" step="1" min="0" max="256" disabled="true" />
+        </div>
+        <div class="right">
+            <label for="input-color-space">Color space conversion - </label>
+        </div>
+        <div>
+            <select id="input-color-space">
+                <option value="" selected="true">No conversion</option>
+            </select>
         </div>
     </div>
 </body>

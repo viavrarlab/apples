@@ -143,7 +143,7 @@ function load_load(load) {
     state.load = load
     load()
 }
-function load_img(src_el, canvas_el, canvas_ctx, width, height) {
+function load_img(src_el, dst_el, canvas_el, canvas_ctx, width, height) {
     // coalesce width and height
     canvas_el.width = state.width
     canvas_el.width ||= width
@@ -153,6 +153,9 @@ function load_img(src_el, canvas_el, canvas_ctx, width, height) {
     canvas_ctx.drawImage(src_el, 0, 0, canvas_el.width, canvas_el.height)
     if (state.mat_src) state.mat_src.delete()
     state.mat_src = cv.imread(canvas_el)
+    // convert color space and show
+    if (state.color_space) cv.cvtColor(state.mat_src, state.mat_src, cv[state.color_space])
+    cv.imshow(dst_el, state.mat_src)
 }
 function set_mat_src(mat_src) {
     // TODO
@@ -177,6 +180,17 @@ function load_height(input_height_el) {
     if (input_height_el.reportValidity()) state.height = input_height_el.value
 }
 function set_height() {
+    // simply reload
+    if (state.load) state.load()
+}
+
+
+// processing color space
+function load_color_space(input_color_space_el) {
+    // simply check and set on internal state
+    if (input_color_space_el.reportValidity()) state.color_space = input_color_space_el.value
+}
+function set_color_space() {
     // simply reload
     if (state.load) state.load()
 }
@@ -255,12 +269,13 @@ function main() {
     document.ondragover = load_drag
     document.ondrop = ev => load_drop(ev, input_file_el, input_url_el, submit_fetch_el)
     // processing input
+    const output_initial_el = document.getElementById("output-initial")
     const canvas_el = document.getElementById("canvas")
     const canvas_ctx = canvas_el.getContext("2d")
     callbacks.mat_src = [set_mat_src]
-    img_el.onload = () => load_load(() => load_img(img_el, canvas_el, canvas_ctx, img_el.width, img_el.height))
-    video_el.onloadeddata = () => load_load(() => load_img(video_el, canvas_el, canvas_ctx, video_el.clientWidth, video_el.clientHeight))
-    video_el.onseeked = () => load_img(video_el, canvas_el, canvas_ctx, video_el.clientWidth, video_el.clientHeight)
+    img_el.onload = () => load_load(() => load_img(img_el, output_initial_el, canvas_el, canvas_ctx, img_el.width, img_el.height))
+    video_el.onloadeddata = () => load_load(() => load_img(video_el, output_initial_el, canvas_el, canvas_ctx, video_el.clientWidth, video_el.clientHeight))
+    video_el.onseeked = () => load_img(video_el, output_initial_el, canvas_el, canvas_ctx, video_el.clientWidth, video_el.clientHeight)
     // processing width
     const input_width_el = document.getElementById("input-width")
     callbacks.width = [set_width]
@@ -278,6 +293,17 @@ function main() {
     callbacks.video_src.push(() => input_fps_el.disabled = false)
     input_fps_el.onchange = () => load_fps(input_fps_el)
     change(input_fps_el)
+    // processing color space
+    const input_color_space_el = document.getElementById("input-color-space")
+    Object.keys(cv).filter(key => key.startsWith("COLOR_")).forEach(key => {
+        const input_color_space_option_el = document.createElement("option")
+        input_color_space_option_el.value = key
+        input_color_space_option_el.innerHTML = key.slice(6)
+        input_color_space_el.appendChild(input_color_space_option_el)
+    })
+    callbacks.color_space = [set_color_space]
+    input_color_space_el.onchange = () => load_color_space(input_color_space_el)
+    change(input_color_space_el)
     // video play
     callbacks.play = [set_play]
     video_el.onplay = () => load_play(video_el)
