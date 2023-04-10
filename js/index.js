@@ -32,6 +32,58 @@ function change(el) {
 }
 
 
+// plot histogram
+function plot_hist(src, dst_el, bins = 256, min = 0, max = 256) {
+    // need to pass src as vector
+    const srcs = new cv.MatVector()
+    srcs.push_back(src)
+    // need to pass, not used
+    const mask = new cv.Mat()
+    // result histogram
+    const hist = new cv.Mat()
+    // result plot
+    const dst = new cv.Mat.zeros(src.rows, bins, cv.CV_8UC3)
+    try {
+        // grab channels and calculate height of each histogram
+        const channels = src.channels()
+        const height = Math.trunc(src.rows / channels)
+        // start with red and loop channels
+        let color = new cv.Scalar(255, 0, 0)
+        let channel = -1
+        while (++channel < channels) {
+            // calculate channel histogram and its bounds
+            cv.calcHist(srcs, [channel], mask, hist, [bins], [min, max])
+            const bounds = cv.minMaxLoc(hist, mask)
+            // calculate histogram plot floor height
+            const floor = height * channel + height
+            // loop bins
+            let bin = -1
+            while (++bin < bins) {
+                // calculate plot value from hist
+                // note that hist contains raw pixel counts, as such normalize with max and scale to height
+                const value = Math.trunc(hist.data32F[bin] / bounds.maxVal * (height - 1))
+                // don't draw points with no value
+                if (!value) continue
+                // draw a vertical line from bot to top
+                const bot = new cv.Point(bin, floor)
+                const top = new cv.Point(bin, floor - value)
+                cv.line(dst, bot, top, color, 1)
+            }
+            // rotate color
+            color = new cv.Scalar(color[2], color[0], color[1])
+        }
+        // show histogram
+        cv.imshow(dst_el, dst)
+    } finally {
+        // deallocate all
+        dst.delete()
+        hist.delete()
+        mask.delete()
+        srcs.delete()
+    }
+}
+
+
 
 
 
@@ -151,6 +203,18 @@ function load_drop(ev, input_file_el, input_url_el, submit_fetch_el) {
 }
 
 
+// original histogram
+function load_hist(input_hist_el) {
+    // simply check and set on internal state
+    if (input_hist_el.reportValidity()) state.hist = input_hist_el.checked
+}
+function set_hist(hist, output_hist_ctx) {
+    // simply reload if histogram is required, otherwise clear
+    if (hist && state.load) state.load()
+    else { output_hist_ctx.clearRect(0, 0, output_hist_ctx.canvas.width, output_hist_ctx.canvas.height) }
+}
+
+
 
 
 
@@ -166,7 +230,7 @@ function load_load(load) {
     state.load = load
     load()
 }
-function load_img(src_el, dst_el, canvas_el, canvas_ctx, width, height) {
+function load_img(src_el, dst_el, canvas_el, canvas_ctx, width, height, hist_el, initial_hist_el) {
     // coalesce width and height
     canvas_el.width = state.width
     canvas_el.width ||= width
@@ -176,9 +240,12 @@ function load_img(src_el, dst_el, canvas_el, canvas_ctx, width, height) {
     canvas_ctx.drawImage(src_el, 0, 0, canvas_el.width, canvas_el.height)
     const mat_initial = cv.imread(canvas_el)
     try {
-        // convert color space and show
+        // plot original histogram and convert color space
+        if (state.hist) plot_hist(mat_initial, hist_el)
         if (state.color_space) cv.cvtColor(mat_initial, mat_initial, cv[state.color_space])
+        // show converted and plot histogram
         cv.imshow(dst_el, mat_initial)
+        if (state.initial_hist) plot_hist(mat_initial, initial_hist_el)
     } catch (exc) {
         // failed, delete new
         mat_initial.delete()
@@ -262,6 +329,18 @@ function set_play(play) {
 }
 
 
+// histogram
+function load_initial_hist(input_initial_hist_el) {
+    // simply check and set on internal state
+    if (input_initial_hist_el.reportValidity()) state.initial_hist = input_initial_hist_el.checked
+}
+function set_initial_hist(initial_hist, output_initial_hist_ctx) {
+    // simply reload if histogram is required, otherwise clear
+    if (initial_hist && state.load) state.load()
+    else { output_initial_hist_ctx.clearRect(0, 0, output_initial_hist_ctx.canvas.width, output_initial_hist_ctx.canvas.height) }
+}
+
+
 
 
 
@@ -314,11 +393,21 @@ function main() {
     // react to drag & drop on the entire document
     document.ondragover = load_drag
     document.ondrop = ev => load_drop(ev, input_file_el, input_url_el, submit_fetch_el)
+    // grab original histogram el
+    const output_hist_el = document.getElementById("output-hist")
+    const output_hist_ctx = output_hist_el.getContext("2d")
+    // same steps for histogram input
+    const input_hist_el = document.getElementById("input-hist")
+    callbacks.hist = [hist => set_hist(hist, output_hist_ctx)]
+    input_hist_el.onchange = () => load_hist(input_hist_el)
+    change(input_hist_el)
     //
     // stage 2 - initial processing
     //
-    // grab stage output el
+    // grab stage output els
     const output_initial_el = document.getElementById("output-initial")
+    const output_initial_hist_el = document.getElementById("output-initial-hist")
+    const output_initial_hist_ctx = output_initial_hist_el.getContext("2d")
     // grab temp canvas and its context
     const canvas_el = document.getElementById("canvas")
     const canvas_ctx = canvas_el.getContext("2d")
@@ -326,10 +415,22 @@ function main() {
     callbacks.mat_initial = [set_mat_initial]
     // react to original src load
     // note that we remember which one we did last so that we can repeat it when stage config changes
-    img_el.onload = () => load_load(() => load_img(img_el, output_initial_el, canvas_el, canvas_ctx, img_el.width, img_el.height))
-    video_el.onloadeddata = () => load_load(() => load_img(video_el, output_initial_el, canvas_el, canvas_ctx, video_el.clientWidth, video_el.clientHeight))
+    img_el.onload = () => load_load(() => load_img(
+        img_el, output_initial_el,
+        canvas_el, canvas_ctx,
+        img_el.width, img_el.height,
+        output_hist_el, output_initial_hist_el))
+    video_el.onloadeddata = () => load_load(() => load_img(
+        video_el, output_initial_el,
+        canvas_el, canvas_ctx,
+        video_el.clientWidth, video_el.clientHeight,
+        output_hist_el, output_initial_hist_el))
     // also react to the user seeking to a new time in video
-    video_el.onseeked = () => load_img(video_el, output_initial_el, canvas_el, canvas_ctx, video_el.clientWidth, video_el.clientHeight)
+    video_el.onseeked = () => load_img(
+        video_el, output_initial_el,
+        canvas_el, canvas_ctx,
+        video_el.clientWidth, video_el.clientHeight,
+        output_hist_el, output_initial_hist_el)
     // same steps for width
     const input_width_el = document.getElementById("input-width")
     callbacks.width = [set_width]
@@ -363,6 +464,11 @@ function main() {
     video_el.onplay = () => load_play(video_el)
     video_el.onpause = () => load_play(video_el)
     load_play(video_el)
+    // same steps for histogram input
+    const input_initial_hist_el = document.getElementById("input-initial-hist")
+    callbacks.initial_hist = [initial_hist => set_initial_hist(initial_hist, output_initial_hist_ctx)]
+    input_initial_hist_el.onchange = () => load_initial_hist(input_initial_hist_el)
+    change(input_initial_hist_el)
 }
 
 

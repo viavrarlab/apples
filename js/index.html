@@ -11,10 +11,13 @@
 <body>
     <div id="grid-container">
         <!-- stage 1 - original input -->
-        <div style="grid-row: 1 / span 4;">
+        <div style="grid-row: 1 / span 5;">
             <img id="img" crossorigin="anonymous" hidden="true" />
             <video id="video" crossorigin="anonymous" hidden="true" controls="true" loop="true"></video>
             <canvas id="canvas" hidden="true"></canvas>
+        </div>
+        <div style="grid-row: 1 / span 5;">
+            <canvas id="output-hist"></canvas>
         </div>
         <div class="right">
             <label for="input-file">Upload from computer - </label>
@@ -41,9 +44,18 @@
         <div>
             <input id="input-loop" type="checkbox" checked="true" disabled="true" />
         </div>
+        <div class="right">
+            <label for="input-hist">Show histogram - </label>
+        </div>
+        <div>
+            <input id="input-hist" type="checkbox" />
+        </div>
         <!-- stage 2 - initial processing -->
-        <div style="grid-row: 5 / span 4;">
+        <div style="grid-row: 6 / span 5;">
             <canvas id="output-initial"></canvas>
+        </div>
+        <div style="grid-row: 6 / span 5;">
+            <canvas id="output-initial-hist"></canvas>
         </div>
         <div class="right">
             <label for="input-width">Width - </label>
@@ -70,6 +82,12 @@
         </div>
         <div>
             <input id="input-fps" type="number" value="0" step="1" min="0" max="256" disabled="true" />
+        </div>
+        <div class="right">
+            <label for="input-initial-hist">Show histogram - </label>
+        </div>
+        <div>
+            <input id="input-initial-hist" type="checkbox" />
         </div>
     </div>
 </body>
