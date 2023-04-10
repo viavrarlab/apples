@@ -8,11 +8,18 @@ const callbacks = {}
 const state = new Proxy({}, {
     // intercept property set
     set: (obj, key, value) => {
+        // change property only if there's a difference
+        if (obj[key] == value) return true
         // log and change property
         console.log(`state.${key} = ${obj[key]} => ${value}`)
         obj[key] = value
         // invoke callbacks and return
-        if (key in callbacks) callbacks[key].forEach(callback => callback(value))
+        try {
+            if (key in callbacks) callbacks[key].forEach(callback => callback(value))
+        } catch (exc) {
+            window.alert(`Not all combinations of options will work, some will fail, like this one - ${exc.toString()}`)
+            throw exc
+        }
         return true
     }
 })
@@ -23,6 +30,15 @@ function change(el) {
     // simply dispatch with new event
     el.dispatchEvent(new Event("change"))
 }
+
+
+
+
+
+// stage 1 - original input
+
+
+
 
 
 // video playback rate
@@ -120,10 +136,8 @@ function load_drag(ev) {
     ev.preventDefault()
 }
 function load_drop(ev, input_file_el, input_url_el, submit_fetch_el) {
-    // stop browser from default and log drop
+    // stop browser from default and check if its files or urls
     ev.preventDefault()
-    console.log(ev)
-    // check if its files or urls
     if (ev.dataTransfer.files.length) {
         // files, load through file el
         input_file_el.files = ev.dataTransfer.files
@@ -137,7 +151,16 @@ function load_drop(ev, input_file_el, input_url_el, submit_fetch_el) {
 }
 
 
-// processing input
+
+
+
+// stage 2 - initial processing
+
+
+
+
+
+// initial input
 function load_load(load) {
     // store and execute load function
     state.load = load
@@ -149,21 +172,29 @@ function load_img(src_el, dst_el, canvas_el, canvas_ctx, width, height) {
     canvas_el.width ||= width
     canvas_el.height = state.height
     canvas_el.height ||= height
-    // resize, delete previous and read new
+    // resize and read new
     canvas_ctx.drawImage(src_el, 0, 0, canvas_el.width, canvas_el.height)
-    if (state.mat_src) state.mat_src.delete()
-    state.mat_src = cv.imread(canvas_el)
-    // convert color space and show
-    if (state.color_space) cv.cvtColor(state.mat_src, state.mat_src, cv[state.color_space])
-    cv.imshow(dst_el, state.mat_src)
+    const mat_initial = cv.imread(canvas_el)
+    try {
+        // convert color space and show
+        if (state.color_space) cv.cvtColor(mat_initial, mat_initial, cv[state.color_space])
+        cv.imshow(dst_el, mat_initial)
+    } catch (exc) {
+        // failed, delete new
+        mat_initial.delete()
+        throw exc
+    }
+    // delete previous and set new
+    if (state.mat_initial) state.mat_initial.delete()
+    state.mat_initial = mat_initial
 }
-function set_mat_src(mat_src) {
+function set_mat_initial(mat_initial) {
     // TODO
-    console.log(mat_src)
+    console.log(mat_initial)
 }
 
 
-// processing width
+// width
 function load_width(input_width_el) {
     // simply check and set on internal state
     if (input_width_el.reportValidity()) state.width = input_width_el.value
@@ -174,7 +205,7 @@ function set_width() {
 }
 
 
-// processing height
+// height
 function load_height(input_height_el) {
     // simply check and set on internal state
     if (input_height_el.reportValidity()) state.height = input_height_el.value
@@ -185,7 +216,7 @@ function set_height() {
 }
 
 
-// processing color space
+// color space
 function load_color_space(input_color_space_el) {
     // simply check and set on internal state
     if (input_color_space_el.reportValidity()) state.color_space = input_color_space_el.value
@@ -196,7 +227,7 @@ function set_color_space() {
 }
 
 
-// processing fps
+// video fps
 function load_fps(input_fps_el) {
     // simply check and set on internal state
     if (input_fps_el.reportValidity()) state.fps = input_fps_el.value
@@ -231,29 +262,44 @@ function set_play(play) {
 }
 
 
+
+
+
+// initialization
+
+
+
+
+
 // main entry point
 function main() {
-    // original src
+    //
+    // stage 1 - original input
+    //
+    // grab original src els
     const img_el = document.getElementById("img")
     const video_el = document.getElementById("video")
-    // video playback rate
+    // grab video playback rate el
     const input_playback_rate_el = document.getElementById("input-playback-rate")
+    // register callback to react on internal state change
     callbacks.playback_rate = [playback_rate => set_playback_rate(playback_rate, video_el)]
+    // register callback to change internal state on el change
     input_playback_rate_el.onchange = () => load_playback_rate(input_playback_rate_el)
+    // fire el change to initialize and sync internal state
     change(input_playback_rate_el)
-    // video loop
+    // same steps for video loop
     const input_loop_el = document.getElementById("input-loop")
     callbacks.loop = [loop => set_loop(loop, video_el)]
     input_loop_el.onchange = () => load_loop(input_loop_el)
     change(input_loop_el)
-    // img/video src
+    // react to img/video src change fired by multiple methods
     callbacks.img_src = [img_src => set_img_src(img_src, img_el, video_el, input_playback_rate_el, input_loop_el)]
     callbacks.video_src = [video_src => set_video_src(video_src, img_el, video_el, input_playback_rate_el, input_loop_el)]
-    // src input from file
+    // same steps for src input from file
     const input_file_el = document.getElementById("input-file")
     input_file_el.onchange = () => load_file(input_file_el)
     change(input_file_el)
-    // src input from url
+    // same steps for src input from url
     const submit_fetch_el = document.getElementById("submit-fetch")
     const input_url_el = document.getElementById("input-url")
     // proxies in case of cors problems
@@ -265,35 +311,36 @@ function main() {
     ]
     submit_fetch_el.onclick = () => load_url(input_url_el, proxies)
     submit_fetch_el.click()
-    // drop
+    // react to drag & drop on the entire document
     document.ondragover = load_drag
     document.ondrop = ev => load_drop(ev, input_file_el, input_url_el, submit_fetch_el)
-    // processing input
+    //
+    // stage 2 - initial processing
+    //
+    // grab stage output el
     const output_initial_el = document.getElementById("output-initial")
+    // grab temp canvas and its context
     const canvas_el = document.getElementById("canvas")
     const canvas_ctx = canvas_el.getContext("2d")
-    callbacks.mat_src = [set_mat_src]
+    // react to stage end
+    callbacks.mat_initial = [set_mat_initial]
+    // react to original src load
+    // note that we remember which one we did last so that we can repeat it when stage config changes
     img_el.onload = () => load_load(() => load_img(img_el, output_initial_el, canvas_el, canvas_ctx, img_el.width, img_el.height))
     video_el.onloadeddata = () => load_load(() => load_img(video_el, output_initial_el, canvas_el, canvas_ctx, video_el.clientWidth, video_el.clientHeight))
+    // also react to the user seeking to a new time in video
     video_el.onseeked = () => load_img(video_el, output_initial_el, canvas_el, canvas_ctx, video_el.clientWidth, video_el.clientHeight)
-    // processing width
+    // same steps for width
     const input_width_el = document.getElementById("input-width")
     callbacks.width = [set_width]
     input_width_el.onchange = () => load_width(input_width_el)
     change(input_width_el)
-    // processing height
+    // same steps for height
     const input_height_el = document.getElementById("input-height")
     callbacks.height = [set_height]
     input_height_el.onchange = () => load_height(input_height_el)
     change(input_height_el)
-    // processing fps
-    const input_fps_el = document.getElementById("input-fps")
-    // enable only for video
-    callbacks.img_src.push(() => input_fps_el.disabled = true)
-    callbacks.video_src.push(() => input_fps_el.disabled = false)
-    input_fps_el.onchange = () => load_fps(input_fps_el)
-    change(input_fps_el)
-    // processing color space
+    // same steps for color space, but with dynamic options based on whats available on cv
     const input_color_space_el = document.getElementById("input-color-space")
     Object.keys(cv).filter(key => key.startsWith("COLOR_")).forEach(key => {
         const input_color_space_option_el = document.createElement("option")
@@ -304,7 +351,14 @@ function main() {
     callbacks.color_space = [set_color_space]
     input_color_space_el.onchange = () => load_color_space(input_color_space_el)
     change(input_color_space_el)
-    // video play
+    // same steps for fps, but enable only for video
+    // note that this is monitered in set_play
+    const input_fps_el = document.getElementById("input-fps")
+    callbacks.img_src.push(() => input_fps_el.disabled = true)
+    callbacks.video_src.push(() => input_fps_el.disabled = false)
+    input_fps_el.onchange = () => load_fps(input_fps_el)
+    change(input_fps_el)
+    // same steps for video play
     callbacks.play = [set_play]
     video_el.onplay = () => load_play(video_el)
     video_el.onpause = () => load_play(video_el)
