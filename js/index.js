@@ -208,10 +208,10 @@ function load_hist(input_hist_el) {
     // simply check and set on internal state
     if (input_hist_el.reportValidity()) state.hist = input_hist_el.checked
 }
-function set_hist(hist, output_hist_ctx) {
-    // simply reload if histogram is required, otherwise clear
+function set_hist(hist, output_hist_el) {
+    // hide based on value and reload if histogram is required
+    output_hist_el.hidden = !hist
     if (hist && state.load) state.load()
-    else { output_hist_ctx.clearRect(0, 0, output_hist_ctx.canvas.width, output_hist_ctx.canvas.height) }
 }
 
 
@@ -334,10 +334,10 @@ function load_initial_hist(input_initial_hist_el) {
     // simply check and set on internal state
     if (input_initial_hist_el.reportValidity()) state.initial_hist = input_initial_hist_el.checked
 }
-function set_initial_hist(initial_hist, output_initial_hist_ctx) {
-    // simply reload if histogram is required, otherwise clear
+function set_initial_hist(initial_hist, output_initial_hist_el) {
+    // hide based on value and reload if histogram is required
+    output_initial_hist_el.hidden = !initial_hist
     if (initial_hist && state.load) state.load()
-    else { output_initial_hist_ctx.clearRect(0, 0, output_initial_hist_ctx.canvas.width, output_initial_hist_ctx.canvas.height) }
 }
 
 
@@ -395,10 +395,9 @@ function main() {
     document.ondrop = ev => load_drop(ev, input_file_el, input_url_el, submit_fetch_el)
     // grab original histogram el
     const output_hist_el = document.getElementById("output-hist")
-    const output_hist_ctx = output_hist_el.getContext("2d")
     // same steps for histogram input
     const input_hist_el = document.getElementById("input-hist")
-    callbacks.hist = [hist => set_hist(hist, output_hist_ctx)]
+    callbacks.hist = [hist => set_hist(hist, output_hist_el)]
     input_hist_el.onchange = () => load_hist(input_hist_el)
     change(input_hist_el)
     //
@@ -407,7 +406,6 @@ function main() {
     // grab stage output els
     const output_initial_el = document.getElementById("output-initial")
     const output_initial_hist_el = document.getElementById("output-initial-hist")
-    const output_initial_hist_ctx = output_initial_hist_el.getContext("2d")
     // grab temp canvas and its context
     const canvas_el = document.getElementById("canvas")
     const canvas_ctx = canvas_el.getContext("2d")
@@ -466,7 +464,7 @@ function main() {
     load_play(video_el)
     // same steps for histogram input
     const input_initial_hist_el = document.getElementById("input-initial-hist")
-    callbacks.initial_hist = [initial_hist => set_initial_hist(initial_hist, output_initial_hist_ctx)]
+    callbacks.initial_hist = [initial_hist => set_initial_hist(initial_hist, output_initial_hist_el)]
     input_initial_hist_el.onchange = () => load_initial_hist(input_initial_hist_el)
     change(input_initial_hist_el)
 }
