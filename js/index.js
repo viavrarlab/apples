@@ -96,7 +96,7 @@ function plot_hist(src, dst_el, bins = 256, min = 0, max = 256) {
 // video playback rate
 function load_playback_rate(input_playback_rate_el) {
     // simply check and set on internal state
-    if (input_playback_rate_el.reportValidity()) state.playback_rate = input_playback_rate_el.value
+    if (input_playback_rate_el.reportValidity()) state.playback_rate = parseFloat(input_playback_rate_el.value)
 }
 function set_playback_rate(playback_rate, video_el) {
     // simply set on el
@@ -255,16 +255,12 @@ function load_img(src_el, dst_el, canvas_el, canvas_ctx, width, height, hist_el,
     if (state.mat_initial) state.mat_initial.delete()
     state.mat_initial = mat_initial
 }
-function set_mat_initial(mat_initial) {
-    // TODO
-    console.log(mat_initial)
-}
 
 
 // width
 function load_width(input_width_el) {
     // simply check and set on internal state
-    if (input_width_el.reportValidity()) state.width = input_width_el.value
+    if (input_width_el.reportValidity()) state.width = parseInt(input_width_el.value)
 }
 function set_width() {
     // simply reload
@@ -275,7 +271,7 @@ function set_width() {
 // height
 function load_height(input_height_el) {
     // simply check and set on internal state
-    if (input_height_el.reportValidity()) state.height = input_height_el.value
+    if (input_height_el.reportValidity()) state.height = parseInt(input_height_el.value)
 }
 function set_height() {
     // simply reload
@@ -297,7 +293,7 @@ function set_color_space() {
 // video fps
 function load_fps(input_fps_el) {
     // simply check and set on internal state
-    if (input_fps_el.reportValidity()) state.fps = input_fps_el.value
+    if (input_fps_el.reportValidity()) state.fps = parseInt(input_fps_el.value)
 }
 
 
@@ -339,6 +335,169 @@ function set_initial_hist(initial_hist, output_initial_hist_el) {
     output_initial_hist_el.hidden = !initial_hist
     if (initial_hist && state.load) state.load()
 }
+
+
+
+
+
+// stage 3 - blur
+
+
+
+
+
+// blur image
+function blur_img(dst_el, hist_el) {
+    // check if we have previous stage
+    if (!state.mat_initial) return
+    // allocate dst if we blur, else clone
+    const mat_blur = state.blur ? new cv.Mat() : state.mat_initial.clone()
+    try {
+        // blur based on type
+        switch (state.blur) {
+            case "blur":
+                cv.blur(state.mat_initial, mat_blur, new cv.Size(state.blur_kernel_width, state.blur_kernel_height))
+                break
+            case "GaussianBlur":
+                cv.GaussianBlur(state.mat_initial, mat_blur, new cv.Size(state.blur_kernel_width, state.blur_kernel_height), state.sigma_x, state.sigma_y)
+                break
+            case "medianBlur":
+                cv.medianBlur(state.mat_initial, mat_blur, state.blur_kernel_size)
+                break
+            case "bilateralFilter":
+                cv.bilateralFilter(state.mat_initial, mat_blur, state.blur_diameter, state.sigma_color, state.sigma_space)
+                break
+        }
+        // show blured and plot histogram
+        cv.imshow(dst_el, mat_blur)
+        if (state.blur_hist) plot_hist(mat_blur, hist_el)
+    } catch (exc) {
+        // failed, delete blured
+        mat_blur.delete()
+        throw exc
+    }
+    // delete previous and set new
+    if (state.mat_blur) state.mat_blur.delete()
+    state.mat_blur = mat_blur
+}
+
+
+// blur kernel width
+function load_blur_kernel_width(input_blur_kernel_width_el) {
+    // simply check and set on internal state
+    if (input_blur_kernel_width_el.reportValidity()) state.blur_kernel_width = parseInt(input_blur_kernel_width_el.value)
+}
+
+
+// blur kernel height
+function load_blur_kernel_height(input_blur_kernel_height_el) {
+    // simply check and set on internal state
+    if (input_blur_kernel_height_el.reportValidity()) state.blur_kernel_height = parseInt(input_blur_kernel_height_el.value)
+}
+
+
+// blur kernel size
+function load_blur_kernel_size(input_blur_kernel_size_el) {
+    // simply check and set on internal state
+    if (input_blur_kernel_size_el.reportValidity()) state.blur_kernel_size = parseInt(input_blur_kernel_size_el.value)
+}
+
+
+// blur diameter
+function load_blur_diameter(input_blur_diameter_el) {
+    // simply check and set on internal state
+    if (input_blur_diameter_el.reportValidity()) state.blur_diameter = parseInt(input_blur_diameter_el.value)
+}
+
+
+// sigma x
+function load_sigma_x(input_sigma_x_el) {
+    // simply check and set on internal state
+    if (input_sigma_x_el.reportValidity()) state.sigma_x = parseFloat(input_sigma_x_el.value)
+}
+
+
+// sigma y
+function load_sigma_y(input_sigma_y_el) {
+    // simply check and set on internal state
+    if (input_sigma_y_el.reportValidity()) state.sigma_y = parseFloat(input_sigma_y_el.value)
+}
+
+
+// sigma color
+function load_sigma_color(input_sigma_color_el) {
+    // simply check and set on internal state
+    if (input_sigma_color_el.reportValidity()) state.sigma_color = parseInt(input_sigma_color_el.value)
+}
+
+
+// sigma space
+function load_sigma_space(input_sigma_space_el) {
+    // simply check and set on internal state
+    if (input_sigma_space_el.reportValidity()) state.sigma_space = parseInt(input_sigma_space_el.value)
+}
+
+
+// histogram
+function load_blur_hist(input_blur_hist_el) {
+    // simply check and set on internal state
+    if (input_blur_hist_el.reportValidity()) state.blur_hist = input_blur_hist_el.checked
+}
+function set_blur_hist(blur_hist, output_blur_el, output_blur_hist_el) {
+    // hide based on value and reload if histogram is required
+    output_blur_hist_el.hidden = !blur_hist
+    if (blur_hist) blur_img(output_blur_el, output_blur_hist_el)
+}
+
+
+// blur type
+function load_blur(input_blur_el) {
+    // simply check and set on internal state
+    if (input_blur_el.reportValidity()) state.blur = input_blur_el.value
+}
+function set_blur(blur, output_blur_el, output_blur_hist_el, input_blur_kernel_width_el, input_blur_kernel_height_el, input_blur_kernel_size_el, input_blur_diameter_el, input_sigma_x_el, input_sigma_y_el, input_sigma_color_el, input_sigma_space_el) {
+    input_blur_kernel_width_el.disabled = true
+    input_blur_kernel_height_el.disabled = true
+    input_blur_kernel_size_el.disabled = true
+    input_blur_diameter_el.disabled = true
+    input_sigma_x_el.disabled = true
+    input_sigma_y_el.disabled = true
+    input_sigma_color_el.disabled = true
+    input_sigma_space_el.disabled = true
+    switch (blur) {
+        case "blur":
+            input_blur_kernel_width_el.disabled = false
+            input_blur_kernel_height_el.disabled = false
+            break
+        case "GaussianBlur":
+            input_blur_kernel_width_el.disabled = false
+            input_blur_kernel_height_el.disabled = false
+            input_sigma_x_el.disabled = false
+            input_sigma_y_el.disabled = false
+            break
+        case "medianBlur":
+            input_blur_kernel_size_el.disabled = false
+            break
+        case "bilateralFilter":
+            input_blur_diameter_el.disabled = false
+            input_sigma_color_el.disabled = false
+            input_sigma_space_el.disabled = false
+            break
+    }
+    blur_img(output_blur_el, output_blur_hist_el)
+}
+
+
+
+
+
+// stage 4 - threshold
+
+
+
+
+
+// TODO
 
 
 
@@ -409,8 +568,6 @@ function main() {
     // grab temp canvas and its context
     const canvas_el = document.getElementById("canvas")
     const canvas_ctx = canvas_el.getContext("2d")
-    // react to stage end
-    callbacks.mat_initial = [set_mat_initial]
     // react to original src load
     // note that we remember which one we did last so that we can repeat it when stage config changes
     img_el.onload = () => load_load(() => load_img(
@@ -467,6 +624,68 @@ function main() {
     callbacks.initial_hist = [initial_hist => set_initial_hist(initial_hist, output_initial_hist_el)]
     input_initial_hist_el.onchange = () => load_initial_hist(input_initial_hist_el)
     change(input_initial_hist_el)
+    //
+    // stage 3 - blur
+    //
+    // grab stage output els
+    const output_blur_el = document.getElementById("output-blur")
+    const output_blur_hist_el = document.getElementById("output-blur-hist")
+    // react to stage end
+    callbacks.mat_initial = [() => blur_img(output_blur_el, output_blur_hist_el)]
+    // same steps for blur kernel width input
+    const input_blur_kernel_width_el = document.getElementById("input-blur-kernel-width")
+    callbacks.blur_kernel_width = [() => blur_img(output_blur_el, output_blur_hist_el)]
+    input_blur_kernel_width_el.onchange = () => load_blur_kernel_width(input_blur_kernel_width_el)
+    change(input_blur_kernel_width_el)
+    // same steps for blur kernel height input
+    const input_blur_kernel_height_el = document.getElementById("input-blur-kernel-height")
+    callbacks.blur_kernel_height = [() => blur_img(output_blur_el, output_blur_hist_el)]
+    input_blur_kernel_height_el.onchange = () => load_blur_kernel_height(input_blur_kernel_height_el)
+    change(input_blur_kernel_height_el)
+    // same steps for blur kernel size input
+    const input_blur_kernel_size_el = document.getElementById("input-blur-kernel-size")
+    callbacks.blur_kernel_size = [() => blur_img(output_blur_el, output_blur_hist_el)]
+    input_blur_kernel_size_el.onchange = () => load_blur_kernel_size(input_blur_kernel_size_el)
+    change(input_blur_kernel_size_el)
+    // same steps for blur diameter input
+    const input_blur_diameter_el = document.getElementById("input-blur-diameter")
+    callbacks.blur_diameter = [() => blur_img(output_blur_el, output_blur_hist_el)]
+    input_blur_diameter_el.onchange = () => load_blur_diameter(input_blur_diameter_el)
+    change(input_blur_diameter_el)
+    // same steps for sigma x input
+    const input_sigma_x_el = document.getElementById("input-sigma-x")
+    callbacks.sigma_x = [() => blur_img(output_blur_el, output_blur_hist_el)]
+    input_sigma_x_el.onchange = () => load_sigma_x(input_sigma_x_el)
+    change(input_sigma_x_el)
+    // same steps for sigma y input
+    const input_sigma_y_el = document.getElementById("input-sigma-y")
+    callbacks.sigma_y = [() => blur_img(output_blur_el, output_blur_hist_el)]
+    input_sigma_y_el.onchange = () => load_sigma_y(input_sigma_y_el)
+    change(input_sigma_y_el)
+    // same steps for sigma color input
+    const input_sigma_color_el = document.getElementById("input-sigma-color")
+    callbacks.sigma_color = [() => blur_img(output_blur_el, output_blur_hist_el)]
+    input_sigma_color_el.onchange = () => load_sigma_color(input_sigma_color_el)
+    change(input_sigma_color_el)
+    // same steps for sigma space input
+    const input_sigma_space_el = document.getElementById("input-sigma-space")
+    callbacks.sigma_space = [() => blur_img(output_blur_el, output_blur_hist_el)]
+    input_sigma_space_el.onchange = () => load_sigma_space(input_sigma_space_el)
+    change(input_sigma_space_el)
+    // same steps for histogram input
+    const input_blur_hist_el = document.getElementById("input-blur-hist")
+    callbacks.blur_hist = [blur_hist => set_blur_hist(blur_hist, output_blur_el, output_blur_hist_el)]
+    input_blur_hist_el.onchange = () => load_blur_hist(input_blur_hist_el)
+    change(input_blur_hist_el)
+    // same steps for blur input
+    const input_blur_el = document.getElementById("input-blur")
+    callbacks.blur = [blur => set_blur(blur, output_blur_el, output_blur_hist_el, input_blur_kernel_width_el, input_blur_kernel_height_el, input_blur_kernel_size_el, input_blur_diameter_el, input_sigma_x_el, input_sigma_y_el, input_sigma_color_el, input_sigma_space_el)]
+    input_blur_el.onchange = () => load_blur(input_blur_el)
+    change(input_blur_el)
+    //
+    // stage 4 - threshold
+    //
+    // TODO
 }
 
 
