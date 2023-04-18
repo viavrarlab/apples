@@ -163,6 +163,75 @@
             <input id="input-blur-hist" type="checkbox" />
         </div>
         <!-- stage 4 - threshold -->
+        <div style="grid-row: 21 / span 8;">
+            <canvas id="output-threshold"></canvas>
+        </div>
+        <div style="grid-row: 21 / span 8;">
+            <canvas id="output-threshold-hist" hidden="true"></canvas>
+        </div>
+        <div class="right">
+            <label for="input-threshold">Threshold type - </label>
+        </div>
+        <div>
+            <select id="input-threshold">
+                <option value="" selected="true">No threshold</option>
+                <option value="THRESH_BINARY">THRESH_BINARY</option>
+                <option value="THRESH_BINARY_INV">THRESH_BINARY_INV</option>
+                <option value="THRESH_TRUNC">THRESH_TRUNC</option>
+                <option value="THRESH_TOZERO">THRESH_TOZERO</option>
+                <option value="THRESH_TOZERO_INV">THRESH_TOZERO_INV</option>
+            </select>
+        </div>
+        <div class="right">
+            <label for="input-threshold-value">Threshold value - </label>
+        </div>
+        <div>
+            <input id="input-threshold-value" type="number" value="127" step="1" min="0" max="255" disabled="true" />
+        </div>
+        <div class="right">
+            <label for="input-threshold-max">Threshold max - </label>
+        </div>
+        <div>
+            <input id="input-threshold-max" type="number" value="255" step="1" min="0" max="255" disabled="true" />
+        </div>
+        <div class="right">
+            <label for="input-optimal-threshold">Optimal threshold type - </label>
+        </div>
+        <div>
+            <select id="input-optimal-threshold" disabled="true">
+                <option value="" selected="true">No optimal threshold</option>
+                <option value="THRESH_OTSU">THRESH_OTSU</option>
+                <option value="THRESH_TRIANGLE">THRESH_TRIANGLE</option>
+            </select>
+        </div>
+        <div class="right">
+            <label for="input-adaptive-threshold">Adaptive threshold type - </label>
+        </div>
+        <div>
+            <select id="input-adaptive-threshold" disabled="true">
+                <option value="" selected="true">No adaptive threshold</option>
+                <option value="ADAPTIVE_THRESH_MEAN_C">ADAPTIVE_THRESH_MEAN_C</option>
+                <option value="ADAPTIVE_THRESH_GAUSSIAN_C">ADAPTIVE_THRESH_GAUSSIAN_C</option>
+            </select>
+        </div>
+        <div class="right">
+            <label for="input-threshold-block">Block size - </label>
+        </div>
+        <div>
+            <input id="input-threshold-block" type="number" value="3" step="2" min="3" max="255" disabled="true" />
+        </div>
+        <div class="right">
+            <label for="input-threshold-constant">Constant to substract from mean - </label>
+        </div>
+        <div>
+            <input id="input-threshold-constant" type="number" value="0" step="1" min="-255" max="255" disabled="true" />
+        </div>
+        <div class="right">
+            <label for="input-threshold-hist">Show histogram - </label>
+        </div>
+        <div>
+            <input id="input-threshold-hist" type="checkbox" />
+        </div>
     </div>
 </body>
 

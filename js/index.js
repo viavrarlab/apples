@@ -497,7 +497,139 @@ function set_blur(blur, output_blur_el, output_blur_hist_el, input_blur_kernel_w
 
 
 
-// TODO
+// threshold image
+function threshold_img(dst_el, hist_el) {
+    // check if we have previous stage
+    if (!state.mat_blur) return
+    // allocate dst if we threshold, else clone
+    const mat_threshold = state.threshold ? new cv.Mat() : state.mat_blur.clone()
+    try {
+        if (state.threshold) {
+            if (state.adaptive_threshold) {
+                cv.adaptiveThreshold(state.mat_blur, mat_threshold, state.threshold_max, cv[state.adaptive_threshold], cv[state.threshold], state.threshold_block, state.threshold_constant)
+            } else if (state.optimal_threshold) {
+                cv.threshold(state.mat_blur, mat_threshold, state.threshold_value, state.threshold_max, cv[state.threshold] | cv[state.optimal_threshold])
+            } else {
+                cv.threshold(state.mat_blur, mat_threshold, state.threshold_value, state.threshold_max, cv[state.threshold])
+            }
+        }
+        // show thresholded and plot histogram
+        cv.imshow(dst_el, mat_threshold)
+        if (state.threshold_hist) plot_hist(mat_threshold, hist_el)
+    } catch (exc) {
+        // failed, delete thresholded
+        mat_threshold.delete()
+        throw exc
+    }
+    // delete previous and set new
+    if (state.mat_threshold) state.mat_threshold.delete()
+    state.mat_threshold = mat_threshold
+}
+
+
+// value
+function load_threshold_value(input_threshold_value_el) {
+    // simply check and set on internal state
+    if (input_threshold_value_el.reportValidity()) state.threshold_value = parseInt(input_threshold_value_el.value)
+}
+
+
+// max
+function load_threshold_max(input_threshold_max_el) {
+    // simply check and set on internal state
+    if (input_threshold_max_el.reportValidity()) state.threshold_max = parseInt(input_threshold_max_el.value)
+}
+
+
+// block
+function load_threshold_block(input_threshold_block_el) {
+    // simply check and set on internal state
+    if (input_threshold_block_el.reportValidity()) state.threshold_block = parseInt(input_threshold_block_el.value)
+}
+
+
+// constant
+function load_threshold_constant(input_threshold_constant_el) {
+    // simply check and set on internal state
+    if (input_threshold_constant_el.reportValidity()) state.threshold_constant = parseInt(input_threshold_constant_el.value)
+}
+
+
+// histogram
+function load_threshold_hist(input_threshold_hist_el) {
+    // simply check and set on internal state
+    if (input_threshold_hist_el.reportValidity()) state.threshold_hist = input_threshold_hist_el.checked
+}
+function set_threshold_hist(threshold_hist, output_threshold_el, output_threshold_hist_el) {
+    // hide based on value and reload if histogram is required
+    output_threshold_hist_el.hidden = !threshold_hist
+    if (threshold_hist) threshold_img(output_threshold_el, output_threshold_hist_el)
+}
+
+
+// threshold type
+function load_threshold(input_threshold_el) {
+    // simply check and set on internal state
+    if (input_threshold_el.reportValidity()) state.threshold = input_threshold_el.value
+}
+function set_threshold(threshold, output_threshold_el, output_threshold_hist_el, input_threshold_value_el, input_threshold_max_el, input_optimal_threshold_el, input_adaptive_threshold_el, input_threshold_block_el, input_threshold_constant_el) {
+    input_threshold_value_el.disabled = true
+    input_threshold_max_el.disabled = true
+    input_optimal_threshold_el.disabled = true
+    input_adaptive_threshold_el.disabled = true
+    input_threshold_block_el.disabled = true
+    input_threshold_constant_el.disabled = true
+    switch (threshold) {
+        case "THRESH_BINARY":
+        case "THRESH_BINARY_INV":
+            input_threshold_value_el.disabled = false
+            input_threshold_max_el.disabled = false
+            break
+        case "THRESH_TRUNC":
+        case "THRESH_TOZERO":
+        case "THRESH_TOZERO_INV":
+            input_threshold_value_el.disabled = false
+            break
+        default:
+            threshold_img(output_threshold_el, output_threshold_hist_el)
+            return
+    }
+    switch (state.optimal_threshold) {
+        case "THRESH_OTSU":
+        case "THRESH_TRIANGLE":
+            input_threshold_value_el.disabled = true
+            break
+        default:
+            input_adaptive_threshold_el.disabled = false
+            break
+    }
+    switch (state.adaptive_threshold) {
+        case "ADAPTIVE_THRESH_MEAN_C":
+        case "ADAPTIVE_THRESH_GAUSSIAN_C":
+            input_threshold_value_el.disabled = true
+            input_threshold_block_el.disabled = false
+            input_threshold_constant_el.disabled = false
+            break
+        default:
+            input_optimal_threshold_el.disabled = false
+            break
+    }
+    threshold_img(output_threshold_el, output_threshold_hist_el)
+}
+
+
+// optimal threshold type
+function load_optimal_threshold(input_optimal_threshold_el) {
+    // simply check and set on internal state
+    if (input_optimal_threshold_el.reportValidity()) state.optimal_threshold = input_optimal_threshold_el.value
+}
+
+
+// adaptive threshold type
+function load_adaptive_threshold(input_adaptive_threshold_el) {
+    // simply check and set on internal state
+    if (input_adaptive_threshold_el.reportValidity()) state.adaptive_threshold = input_adaptive_threshold_el.value
+}
 
 
 
@@ -685,7 +817,49 @@ function main() {
     //
     // stage 4 - threshold
     //
-    // TODO
+    // grab stage output els
+    const output_threshold_el = document.getElementById("output-threshold")
+    const output_threshold_hist_el = document.getElementById("output-threshold-hist")
+    // react to stage end
+    callbacks.mat_blur = [() => threshold_img(output_threshold_el, output_threshold_hist_el)]
+    // same steps for value input
+    const input_threshold_value_el = document.getElementById("input-threshold-value")
+    callbacks.threshold_value = [() => threshold_img(output_threshold_el, output_threshold_hist_el)]
+    input_threshold_value_el.onchange = () => load_threshold_value(input_threshold_value_el)
+    change(input_threshold_value_el)
+    // same steps for max input
+    const input_threshold_max_el = document.getElementById("input-threshold-max")
+    callbacks.threshold_max = [() => threshold_img(output_threshold_el, output_threshold_hist_el)]
+    input_threshold_max_el.onchange = () => load_threshold_max(input_threshold_max_el)
+    change(input_threshold_max_el)
+    // same steps for block input
+    const input_threshold_block_el = document.getElementById("input-threshold-block")
+    callbacks.threshold_block = [() => threshold_img(output_threshold_el, output_threshold_hist_el)]
+    input_threshold_block_el.onchange = () => load_threshold_block(input_threshold_block_el)
+    change(input_threshold_block_el)
+    // same steps for constant input
+    const input_threshold_constant_el = document.getElementById("input-threshold-constant")
+    callbacks.threshold_constant = [() => threshold_img(output_threshold_el, output_threshold_hist_el)]
+    input_threshold_constant_el.onchange = () => load_threshold_constant(input_threshold_constant_el)
+    change(input_threshold_constant_el)
+    // same steps for histogram input
+    const input_threshold_hist_el = document.getElementById("input-threshold-hist")
+    callbacks.threshold_hist = [threshold_hist => set_threshold_hist(threshold_hist, output_threshold_el, output_threshold_hist_el)]
+    input_threshold_hist_el.onchange = () => load_threshold_hist(input_threshold_hist_el)
+    change(input_threshold_hist_el)
+    // same steps for threshold input
+    const input_threshold_el = document.getElementById("input-threshold")
+    const input_optimal_threshold_el = document.getElementById("input-optimal-threshold")
+    const input_adaptive_threshold_el = document.getElementById("input-adaptive-threshold")
+    callbacks.threshold = [threshold => set_threshold(threshold, output_threshold_el, output_threshold_hist_el, input_threshold_value_el, input_threshold_max_el, input_optimal_threshold_el, input_adaptive_threshold_el, input_threshold_block_el, input_threshold_constant_el)]
+    callbacks.optimal_threshold = [() => set_threshold(state.threshold, output_threshold_el, output_threshold_hist_el, input_threshold_value_el, input_threshold_max_el, input_optimal_threshold_el, input_adaptive_threshold_el, input_threshold_block_el, input_threshold_constant_el)]
+    callbacks.adaptive_threshold = [() => set_threshold(state.threshold, output_threshold_el, output_threshold_hist_el, input_threshold_value_el, input_threshold_max_el, input_optimal_threshold_el, input_adaptive_threshold_el, input_threshold_block_el, input_threshold_constant_el)]
+    input_threshold_el.onchange = () => load_threshold(input_threshold_el)
+    input_optimal_threshold_el.onchange = () => load_optimal_threshold(input_optimal_threshold_el)
+    input_adaptive_threshold_el.onchange = () => load_adaptive_threshold(input_adaptive_threshold_el)
+    change(input_threshold_el)
+    change(input_optimal_threshold_el)
+    change(input_adaptive_threshold_el)
 }
 
 
