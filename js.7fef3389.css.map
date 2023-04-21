@@ -1,0 +1,1 @@
+{"version":3,"sources":["index.css"],"names":[],"mappings":"AAAA,GACI,kBACJ,CAEA,OACI,UACJ,CAEA,OACI,gBACJ","file":"js.7fef3389.css","sourceRoot":"../js","sourcesContent":["td {\n    vertical-align: top;\n}\n\n.short {\n    height: 1px;\n}\n\n.right {\n    text-align: right;\n}\n"]}
