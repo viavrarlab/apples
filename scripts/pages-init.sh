@@ -7,6 +7,7 @@ cd ../apples-temp
 git checkout pages
 git pull origin pages
 git pull hub pages
+git pull via pages
 mkdir ../apples-pages
 cp -r .git ../apples-pages/.git
 cd ../apples-pages

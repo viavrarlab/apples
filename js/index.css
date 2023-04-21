@@ -1,10 +1,11 @@
-#grid-container {
-    display: grid;
-    grid-template-columns: repeat(3, auto) 1fr;
-    grid-template-rows: repeat(4, auto) 1fr repeat(4, auto) 1fr repeat(9, auto) 1fr repeat(7, auto) 1fr;
-    gap: 5px;
+td {
+    vertical-align: top;
+}
+
+.short {
+    height: 1px;
 }
 
 .right {
-    justify-self: right;
+    text-align: right;
 }

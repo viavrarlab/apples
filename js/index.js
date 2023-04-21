@@ -25,6 +25,25 @@ const state = new Proxy({}, {
 })
 
 
+// generate simple load functions
+function identity(value) {
+    return value
+}
+function get_value(target) {
+    return target.value
+}
+function get_checked(target) {
+    return target.checked
+}
+function get_check_set_load(key, parse = identity, value = get_value, object = state) {
+    function load(ev) {
+        // simply check and set on object
+        if (ev.target.reportValidity()) object[key] = parse(value(ev.target))
+    }
+    return load
+}
+
+
 // manual change dispatch
 function change(el) {
     // simply dispatch with new event
@@ -93,29 +112,6 @@ function plot_hist(src, dst_el, bins = 256, min = 0, max = 256) {
 
 
 
-// video playback rate
-function load_playback_rate(input_playback_rate_el) {
-    // simply check and set on internal state
-    if (input_playback_rate_el.reportValidity()) state.playback_rate = parseFloat(input_playback_rate_el.value)
-}
-function set_playback_rate(playback_rate, video_el) {
-    // simply set on el
-    video_el.playbackRate = playback_rate
-}
-
-
-// video loop
-function load_loop(input_loop_el) {
-    // simply check and set on internal state
-    if (input_loop_el.reportValidity()) state.loop = input_loop_el.checked
-}
-function set_loop(loop, video_el) {
-    // simply set on el
-    video_el.loop = loop
-}
-
-
-// img/video src
 function load_src(src, type) {
     // src is already prepared, simply check type and set on internal state
     if (type.startsWith("image")) state.img_src = URL.createObjectURL(src)
@@ -147,7 +143,6 @@ function set_video_src(video_src, img_el, video_el, input_playback_rate_el, inpu
 }
 
 
-// src input
 function load_file(input_file_el) {
     // check el and files and load the first
     if (input_file_el.reportValidity() && input_file_el.files.length) load_src(input_file_el.files[0], input_file_el.files[0].type)
@@ -182,11 +177,6 @@ async function load_url(input_url_el, proxies) {
 }
 
 
-// drop files and urls
-function load_drag(ev) {
-    // simply stop browser from default
-    ev.preventDefault()
-}
 function load_drop(ev, input_file_el, input_url_el, submit_fetch_el) {
     // stop browser from default and check if its files or urls
     ev.preventDefault()
@@ -203,11 +193,6 @@ function load_drop(ev, input_file_el, input_url_el, submit_fetch_el) {
 }
 
 
-// original histogram
-function load_hist(input_hist_el) {
-    // simply check and set on internal state
-    if (input_hist_el.reportValidity()) state.hist = input_hist_el.checked
-}
 function set_hist(hist, output_hist_el) {
     // hide based on value and reload if histogram is required
     output_hist_el.hidden = !hist
@@ -224,8 +209,7 @@ function set_hist(hist, output_hist_el) {
 
 
 
-// initial input
-function load_load(load) {
+function save_load(load) {
     // store and execute load function
     state.load = load
     load()
@@ -257,47 +241,6 @@ function load_img(src_el, dst_el, canvas_el, canvas_ctx, width, height, hist_el,
 }
 
 
-// width
-function load_width(input_width_el) {
-    // simply check and set on internal state
-    if (input_width_el.reportValidity()) state.width = parseInt(input_width_el.value)
-}
-function set_width() {
-    // simply reload
-    if (state.load) state.load()
-}
-
-
-// height
-function load_height(input_height_el) {
-    // simply check and set on internal state
-    if (input_height_el.reportValidity()) state.height = parseInt(input_height_el.value)
-}
-function set_height() {
-    // simply reload
-    if (state.load) state.load()
-}
-
-
-// color space
-function load_color_space(input_color_space_el) {
-    // simply check and set on internal state
-    if (input_color_space_el.reportValidity()) state.color_space = input_color_space_el.value
-}
-function set_color_space() {
-    // simply reload
-    if (state.load) state.load()
-}
-
-
-// video fps
-function load_fps(input_fps_el) {
-    // simply check and set on internal state
-    if (input_fps_el.reportValidity()) state.fps = parseInt(input_fps_el.value)
-}
-
-
-// video play
 function load_play(video_el) {
     // simply set on internal state
     state.play = !video_el.paused && !video_el.ended
@@ -325,11 +268,6 @@ function set_play(play) {
 }
 
 
-// histogram
-function load_initial_hist(input_initial_hist_el) {
-    // simply check and set on internal state
-    if (input_initial_hist_el.reportValidity()) state.initial_hist = input_initial_hist_el.checked
-}
 function set_initial_hist(initial_hist, output_initial_hist_el) {
     // hide based on value and reload if histogram is required
     output_initial_hist_el.hidden = !initial_hist
@@ -346,7 +284,6 @@ function set_initial_hist(initial_hist, output_initial_hist_el) {
 
 
 
-// blur image
 function blur_img(dst_el, hist_el) {
     // check if we have previous stage
     if (!state.mat_initial) return
@@ -382,67 +319,6 @@ function blur_img(dst_el, hist_el) {
 }
 
 
-// blur kernel width
-function load_blur_kernel_width(input_blur_kernel_width_el) {
-    // simply check and set on internal state
-    if (input_blur_kernel_width_el.reportValidity()) state.blur_kernel_width = parseInt(input_blur_kernel_width_el.value)
-}
-
-
-// blur kernel height
-function load_blur_kernel_height(input_blur_kernel_height_el) {
-    // simply check and set on internal state
-    if (input_blur_kernel_height_el.reportValidity()) state.blur_kernel_height = parseInt(input_blur_kernel_height_el.value)
-}
-
-
-// blur kernel size
-function load_blur_kernel_size(input_blur_kernel_size_el) {
-    // simply check and set on internal state
-    if (input_blur_kernel_size_el.reportValidity()) state.blur_kernel_size = parseInt(input_blur_kernel_size_el.value)
-}
-
-
-// blur diameter
-function load_blur_diameter(input_blur_diameter_el) {
-    // simply check and set on internal state
-    if (input_blur_diameter_el.reportValidity()) state.blur_diameter = parseInt(input_blur_diameter_el.value)
-}
-
-
-// sigma x
-function load_sigma_x(input_sigma_x_el) {
-    // simply check and set on internal state
-    if (input_sigma_x_el.reportValidity()) state.sigma_x = parseFloat(input_sigma_x_el.value)
-}
-
-
-// sigma y
-function load_sigma_y(input_sigma_y_el) {
-    // simply check and set on internal state
-    if (input_sigma_y_el.reportValidity()) state.sigma_y = parseFloat(input_sigma_y_el.value)
-}
-
-
-// sigma color
-function load_sigma_color(input_sigma_color_el) {
-    // simply check and set on internal state
-    if (input_sigma_color_el.reportValidity()) state.sigma_color = parseInt(input_sigma_color_el.value)
-}
-
-
-// sigma space
-function load_sigma_space(input_sigma_space_el) {
-    // simply check and set on internal state
-    if (input_sigma_space_el.reportValidity()) state.sigma_space = parseInt(input_sigma_space_el.value)
-}
-
-
-// histogram
-function load_blur_hist(input_blur_hist_el) {
-    // simply check and set on internal state
-    if (input_blur_hist_el.reportValidity()) state.blur_hist = input_blur_hist_el.checked
-}
 function set_blur_hist(blur_hist, output_blur_el, output_blur_hist_el) {
     // hide based on value and reload if histogram is required
     output_blur_hist_el.hidden = !blur_hist
@@ -450,12 +326,10 @@ function set_blur_hist(blur_hist, output_blur_el, output_blur_hist_el) {
 }
 
 
-// blur type
-function load_blur(input_blur_el) {
-    // simply check and set on internal state
-    if (input_blur_el.reportValidity()) state.blur = input_blur_el.value
-}
-function set_blur(blur, output_blur_el, output_blur_hist_el, input_blur_kernel_width_el, input_blur_kernel_height_el, input_blur_kernel_size_el, input_blur_diameter_el, input_sigma_x_el, input_sigma_y_el, input_sigma_color_el, input_sigma_space_el) {
+function set_blur(
+    blur, output_blur_el, output_blur_hist_el,
+    input_blur_kernel_width_el, input_blur_kernel_height_el, input_blur_kernel_size_el, input_blur_diameter_el,
+    input_sigma_x_el, input_sigma_y_el, input_sigma_color_el, input_sigma_space_el) {
     input_blur_kernel_width_el.disabled = true
     input_blur_kernel_height_el.disabled = true
     input_blur_kernel_size_el.disabled = true
@@ -497,7 +371,6 @@ function set_blur(blur, output_blur_el, output_blur_hist_el, input_blur_kernel_w
 
 
 
-// threshold image
 function threshold_img(dst_el, hist_el) {
     // check if we have previous stage
     if (!state.mat_blur) return
@@ -506,11 +379,17 @@ function threshold_img(dst_el, hist_el) {
     try {
         if (state.threshold) {
             if (state.adaptive_threshold) {
-                cv.adaptiveThreshold(state.mat_blur, mat_threshold, state.threshold_max, cv[state.adaptive_threshold], cv[state.threshold], state.threshold_block, state.threshold_constant)
+                cv.adaptiveThreshold(
+                    state.mat_blur, mat_threshold, state.threshold_max,
+                    cv[state.adaptive_threshold], cv[state.threshold], state.threshold_block, state.threshold_constant)
             } else if (state.optimal_threshold) {
-                cv.threshold(state.mat_blur, mat_threshold, state.threshold_value, state.threshold_max, cv[state.threshold] | cv[state.optimal_threshold])
+                cv.threshold(
+                    state.mat_blur, mat_threshold, state.threshold_value, state.threshold_max,
+                    cv[state.threshold] | cv[state.optimal_threshold])
             } else {
-                cv.threshold(state.mat_blur, mat_threshold, state.threshold_value, state.threshold_max, cv[state.threshold])
+                cv.threshold(
+                    state.mat_blur, mat_threshold, state.threshold_value, state.threshold_max,
+                    cv[state.threshold])
             }
         }
         // show thresholded and plot histogram
@@ -527,39 +406,6 @@ function threshold_img(dst_el, hist_el) {
 }
 
 
-// value
-function load_threshold_value(input_threshold_value_el) {
-    // simply check and set on internal state
-    if (input_threshold_value_el.reportValidity()) state.threshold_value = parseInt(input_threshold_value_el.value)
-}
-
-
-// max
-function load_threshold_max(input_threshold_max_el) {
-    // simply check and set on internal state
-    if (input_threshold_max_el.reportValidity()) state.threshold_max = parseInt(input_threshold_max_el.value)
-}
-
-
-// block
-function load_threshold_block(input_threshold_block_el) {
-    // simply check and set on internal state
-    if (input_threshold_block_el.reportValidity()) state.threshold_block = parseInt(input_threshold_block_el.value)
-}
-
-
-// constant
-function load_threshold_constant(input_threshold_constant_el) {
-    // simply check and set on internal state
-    if (input_threshold_constant_el.reportValidity()) state.threshold_constant = parseInt(input_threshold_constant_el.value)
-}
-
-
-// histogram
-function load_threshold_hist(input_threshold_hist_el) {
-    // simply check and set on internal state
-    if (input_threshold_hist_el.reportValidity()) state.threshold_hist = input_threshold_hist_el.checked
-}
 function set_threshold_hist(threshold_hist, output_threshold_el, output_threshold_hist_el) {
     // hide based on value and reload if histogram is required
     output_threshold_hist_el.hidden = !threshold_hist
@@ -567,12 +413,11 @@ function set_threshold_hist(threshold_hist, output_threshold_el, output_threshol
 }
 
 
-// threshold type
-function load_threshold(input_threshold_el) {
-    // simply check and set on internal state
-    if (input_threshold_el.reportValidity()) state.threshold = input_threshold_el.value
-}
-function set_threshold(threshold, output_threshold_el, output_threshold_hist_el, input_threshold_value_el, input_threshold_max_el, input_optimal_threshold_el, input_adaptive_threshold_el, input_threshold_block_el, input_threshold_constant_el) {
+function set_threshold(
+    threshold, output_threshold_el, output_threshold_hist_el,
+    input_threshold_value_el, input_threshold_max_el,
+    input_optimal_threshold_el, input_adaptive_threshold_el,
+    input_threshold_block_el, input_threshold_constant_el) {
     input_threshold_value_el.disabled = true
     input_threshold_max_el.disabled = true
     input_optimal_threshold_el.disabled = true
@@ -618,20 +463,6 @@ function set_threshold(threshold, output_threshold_el, output_threshold_hist_el,
 }
 
 
-// optimal threshold type
-function load_optimal_threshold(input_optimal_threshold_el) {
-    // simply check and set on internal state
-    if (input_optimal_threshold_el.reportValidity()) state.optimal_threshold = input_optimal_threshold_el.value
-}
-
-
-// adaptive threshold type
-function load_adaptive_threshold(input_adaptive_threshold_el) {
-    // simply check and set on internal state
-    if (input_adaptive_threshold_el.reportValidity()) state.adaptive_threshold = input_adaptive_threshold_el.value
-}
-
-
 
 
 
@@ -646,32 +477,19 @@ function main() {
     //
     // stage 1 - original input
     //
-    // grab original src els
-    const img_el = document.getElementById("img")
-    const video_el = document.getElementById("video")
-    // grab video playback rate el
-    const input_playback_rate_el = document.getElementById("input-playback-rate")
-    // register callback to react on internal state change
-    callbacks.playback_rate = [playback_rate => set_playback_rate(playback_rate, video_el)]
-    // register callback to change internal state on el change
-    input_playback_rate_el.onchange = () => load_playback_rate(input_playback_rate_el)
-    // fire el change to initialize and sync internal state
-    change(input_playback_rate_el)
-    // same steps for video loop
-    const input_loop_el = document.getElementById("input-loop")
-    callbacks.loop = [loop => set_loop(loop, video_el)]
-    input_loop_el.onchange = () => load_loop(input_loop_el)
-    change(input_loop_el)
-    // react to img/video src change fired by multiple methods
-    callbacks.img_src = [img_src => set_img_src(img_src, img_el, video_el, input_playback_rate_el, input_loop_el)]
-    callbacks.video_src = [video_src => set_video_src(video_src, img_el, video_el, input_playback_rate_el, input_loop_el)]
-    // same steps for src input from file
+    // grab IO UI elements
+    const output_img_el = document.getElementById("output-img")
+    const output_video_el = document.getElementById("output-video")
+    const output_hist_el = document.getElementById("output-hist")
     const input_file_el = document.getElementById("input-file")
-    input_file_el.onchange = () => load_file(input_file_el)
-    change(input_file_el)
-    // same steps for src input from url
     const submit_fetch_el = document.getElementById("submit-fetch")
     const input_url_el = document.getElementById("input-url")
+    const input_playback_rate_el = document.getElementById("input-playback-rate")
+    const input_loop_el = document.getElementById("input-loop")
+    const input_hist_el = document.getElementById("input-hist")
+    // grab temp canvas and its context
+    const temp_canvas_el = document.getElementById("temp-canvas")
+    const temp_canvas_ctx = temp_canvas_el.getContext("2d")
     // proxies in case of cors problems
     const proxies = [
         // "https://cors-proxy.htmldriven.com/?url=",
@@ -679,187 +497,184 @@ function main() {
         // "https://crossorigin.me/",
         // "https://api.allorigins.win/raw?url=",
     ]
-    submit_fetch_el.onclick = () => load_url(input_url_el, proxies)
-    submit_fetch_el.click()
-    // react to drag & drop on the entire document
-    document.ondragover = load_drag
-    document.ondrop = ev => load_drop(ev, input_file_el, input_url_el, submit_fetch_el)
-    // grab original histogram el
-    const output_hist_el = document.getElementById("output-hist")
-    // same steps for histogram input
-    const input_hist_el = document.getElementById("input-hist")
+    // register callbacks to react to internal state changes
+    callbacks.play = [set_play]
+    callbacks.playback_rate = [playback_rate => output_video_el.playbackRate = playback_rate]
+    callbacks.loop = [loop => output_video_el.loop = loop]
     callbacks.hist = [hist => set_hist(hist, output_hist_el)]
-    input_hist_el.onchange = () => load_hist(input_hist_el)
+    // react to img/video src change fired by multiple methods
+    callbacks.img_src = [img_src => set_img_src(img_src, output_img_el, output_video_el, input_playback_rate_el, input_loop_el)]
+    callbacks.video_src = [video_src => set_video_src(video_src, output_img_el, output_video_el, input_playback_rate_el, input_loop_el)]
+    // register callbacks to change internal state on element changes
+    output_video_el.onplay = () => load_play(output_video_el)
+    output_video_el.onpause = () => load_play(output_video_el)
+    input_file_el.onchange = () => load_file(input_file_el)
+    submit_fetch_el.onclick = () => load_url(input_url_el, proxies)
+    input_playback_rate_el.onchange = get_check_set_load("playback_rate", parseFloat)
+    input_loop_el.onchange = get_check_set_load("loop", identity, get_checked)
+    input_hist_el.onchange = get_check_set_load("hist", identity, get_checked)
+    // react to drag & drop on the entire document
+    document.ondragover = ev => ev.preventDefault()
+    document.ondrop = ev => load_drop(ev, input_file_el, input_url_el, submit_fetch_el)
+    // react to the original src load
+    // note that we remember which one we did last so that we can repeat it when stage config changes
+    output_img_el.onload = () => save_load(() => load_img(
+        output_img_el, output_initial_el,
+        temp_canvas_el, temp_canvas_ctx,
+        output_img_el.width, output_img_el.height,
+        output_hist_el, output_initial_hist_el))
+    output_video_el.onloadeddata = () => save_load(() => load_img(
+        output_video_el, output_initial_el,
+        temp_canvas_el, temp_canvas_ctx,
+        output_video_el.clientWidth, output_video_el.clientHeight,
+        output_hist_el, output_initial_hist_el))
+    // also react to the user seeking to a new time in video
+    output_video_el.onseeked = () => load_img(
+        output_video_el, output_initial_el,
+        temp_canvas_el, temp_canvas_ctx,
+        output_video_el.clientWidth, output_video_el.clientHeight,
+        output_hist_el, output_initial_hist_el)
+    // fire element changes to initialize and sync internal state
+    load_play(output_video_el)
+    change(input_file_el)
+    submit_fetch_el.click()
+    change(input_playback_rate_el)
+    change(input_loop_el)
     change(input_hist_el)
     //
     // stage 2 - initial processing
     //
-    // grab stage output els
     const output_initial_el = document.getElementById("output-initial")
     const output_initial_hist_el = document.getElementById("output-initial-hist")
-    // grab temp canvas and its context
-    const canvas_el = document.getElementById("canvas")
-    const canvas_ctx = canvas_el.getContext("2d")
-    // react to original src load
-    // note that we remember which one we did last so that we can repeat it when stage config changes
-    img_el.onload = () => load_load(() => load_img(
-        img_el, output_initial_el,
-        canvas_el, canvas_ctx,
-        img_el.width, img_el.height,
-        output_hist_el, output_initial_hist_el))
-    video_el.onloadeddata = () => load_load(() => load_img(
-        video_el, output_initial_el,
-        canvas_el, canvas_ctx,
-        video_el.clientWidth, video_el.clientHeight,
-        output_hist_el, output_initial_hist_el))
-    // also react to the user seeking to a new time in video
-    video_el.onseeked = () => load_img(
-        video_el, output_initial_el,
-        canvas_el, canvas_ctx,
-        video_el.clientWidth, video_el.clientHeight,
-        output_hist_el, output_initial_hist_el)
-    // same steps for width
     const input_width_el = document.getElementById("input-width")
-    callbacks.width = [set_width]
-    input_width_el.onchange = () => load_width(input_width_el)
-    change(input_width_el)
-    // same steps for height
     const input_height_el = document.getElementById("input-height")
-    callbacks.height = [set_height]
-    input_height_el.onchange = () => load_height(input_height_el)
-    change(input_height_el)
-    // same steps for color space, but with dynamic options based on whats available on cv
     const input_color_space_el = document.getElementById("input-color-space")
+    const input_fps_el = document.getElementById("input-fps")
+    const input_initial_hist_el = document.getElementById("input-initial-hist")
+    callbacks.width = [() => state.load?.()]
+    callbacks.height = [() => state.load?.()]
+    callbacks.color_space = [() => state.load?.()]
+    callbacks.initial_hist = [initial_hist => set_initial_hist(initial_hist, output_initial_hist_el)]
+    // enable fps only for video
+    // note that this is monitered in set_play
+    callbacks.img_src.push(() => input_fps_el.disabled = true)
+    callbacks.video_src.push(() => input_fps_el.disabled = false)
+    input_width_el.onchange = get_check_set_load("width", parseInt)
+    input_height_el.onchange = get_check_set_load("height", parseInt)
+    input_color_space_el.onchange = get_check_set_load("color_space")
+    input_fps_el.onchange = get_check_set_load("fps", parseInt)
+    input_initial_hist_el.onchange = get_check_set_load("initial_hist", identity, get_checked)
+    // dynamic options for color space based on whats available on cv
     Object.keys(cv).filter(key => key.startsWith("COLOR_")).forEach(key => {
         const input_color_space_option_el = document.createElement("option")
         input_color_space_option_el.value = key
         input_color_space_option_el.innerHTML = key.slice(6)
         input_color_space_el.appendChild(input_color_space_option_el)
     })
-    callbacks.color_space = [set_color_space]
-    input_color_space_el.onchange = () => load_color_space(input_color_space_el)
+    change(input_width_el)
+    change(input_height_el)
     change(input_color_space_el)
-    // same steps for fps, but enable only for video
-    // note that this is monitered in set_play
-    const input_fps_el = document.getElementById("input-fps")
-    callbacks.img_src.push(() => input_fps_el.disabled = true)
-    callbacks.video_src.push(() => input_fps_el.disabled = false)
-    input_fps_el.onchange = () => load_fps(input_fps_el)
     change(input_fps_el)
-    // same steps for video play
-    callbacks.play = [set_play]
-    video_el.onplay = () => load_play(video_el)
-    video_el.onpause = () => load_play(video_el)
-    load_play(video_el)
-    // same steps for histogram input
-    const input_initial_hist_el = document.getElementById("input-initial-hist")
-    callbacks.initial_hist = [initial_hist => set_initial_hist(initial_hist, output_initial_hist_el)]
-    input_initial_hist_el.onchange = () => load_initial_hist(input_initial_hist_el)
     change(input_initial_hist_el)
     //
     // stage 3 - blur
     //
-    // grab stage output els
     const output_blur_el = document.getElementById("output-blur")
     const output_blur_hist_el = document.getElementById("output-blur-hist")
-    // react to stage end
-    callbacks.mat_initial = [() => blur_img(output_blur_el, output_blur_hist_el)]
-    // same steps for blur kernel width input
-    const input_blur_kernel_width_el = document.getElementById("input-blur-kernel-width")
-    callbacks.blur_kernel_width = [() => blur_img(output_blur_el, output_blur_hist_el)]
-    input_blur_kernel_width_el.onchange = () => load_blur_kernel_width(input_blur_kernel_width_el)
-    change(input_blur_kernel_width_el)
-    // same steps for blur kernel height input
-    const input_blur_kernel_height_el = document.getElementById("input-blur-kernel-height")
-    callbacks.blur_kernel_height = [() => blur_img(output_blur_el, output_blur_hist_el)]
-    input_blur_kernel_height_el.onchange = () => load_blur_kernel_height(input_blur_kernel_height_el)
-    change(input_blur_kernel_height_el)
-    // same steps for blur kernel size input
-    const input_blur_kernel_size_el = document.getElementById("input-blur-kernel-size")
-    callbacks.blur_kernel_size = [() => blur_img(output_blur_el, output_blur_hist_el)]
-    input_blur_kernel_size_el.onchange = () => load_blur_kernel_size(input_blur_kernel_size_el)
-    change(input_blur_kernel_size_el)
-    // same steps for blur diameter input
-    const input_blur_diameter_el = document.getElementById("input-blur-diameter")
-    callbacks.blur_diameter = [() => blur_img(output_blur_el, output_blur_hist_el)]
-    input_blur_diameter_el.onchange = () => load_blur_diameter(input_blur_diameter_el)
-    change(input_blur_diameter_el)
-    // same steps for sigma x input
-    const input_sigma_x_el = document.getElementById("input-sigma-x")
-    callbacks.sigma_x = [() => blur_img(output_blur_el, output_blur_hist_el)]
-    input_sigma_x_el.onchange = () => load_sigma_x(input_sigma_x_el)
-    change(input_sigma_x_el)
-    // same steps for sigma y input
-    const input_sigma_y_el = document.getElementById("input-sigma-y")
-    callbacks.sigma_y = [() => blur_img(output_blur_el, output_blur_hist_el)]
-    input_sigma_y_el.onchange = () => load_sigma_y(input_sigma_y_el)
-    change(input_sigma_y_el)
-    // same steps for sigma color input
-    const input_sigma_color_el = document.getElementById("input-sigma-color")
-    callbacks.sigma_color = [() => blur_img(output_blur_el, output_blur_hist_el)]
-    input_sigma_color_el.onchange = () => load_sigma_color(input_sigma_color_el)
-    change(input_sigma_color_el)
-    // same steps for sigma space input
-    const input_sigma_space_el = document.getElementById("input-sigma-space")
-    callbacks.sigma_space = [() => blur_img(output_blur_el, output_blur_hist_el)]
-    input_sigma_space_el.onchange = () => load_sigma_space(input_sigma_space_el)
-    change(input_sigma_space_el)
-    // same steps for histogram input
-    const input_blur_hist_el = document.getElementById("input-blur-hist")
-    callbacks.blur_hist = [blur_hist => set_blur_hist(blur_hist, output_blur_el, output_blur_hist_el)]
-    input_blur_hist_el.onchange = () => load_blur_hist(input_blur_hist_el)
-    change(input_blur_hist_el)
-    // same steps for blur input
     const input_blur_el = document.getElementById("input-blur")
-    callbacks.blur = [blur => set_blur(blur, output_blur_el, output_blur_hist_el, input_blur_kernel_width_el, input_blur_kernel_height_el, input_blur_kernel_size_el, input_blur_diameter_el, input_sigma_x_el, input_sigma_y_el, input_sigma_color_el, input_sigma_space_el)]
-    input_blur_el.onchange = () => load_blur(input_blur_el)
+    const input_blur_kernel_width_el = document.getElementById("input-blur-kernel-width")
+    const input_blur_kernel_height_el = document.getElementById("input-blur-kernel-height")
+    const input_blur_kernel_size_el = document.getElementById("input-blur-kernel-size")
+    const input_blur_diameter_el = document.getElementById("input-blur-diameter")
+    const input_sigma_x_el = document.getElementById("input-sigma-x")
+    const input_sigma_y_el = document.getElementById("input-sigma-y")
+    const input_sigma_color_el = document.getElementById("input-sigma-color")
+    const input_sigma_space_el = document.getElementById("input-sigma-space")
+    const input_blur_hist_el = document.getElementById("input-blur-hist")
+    callbacks.mat_initial = [() => blur_img(output_blur_el, output_blur_hist_el)]
+    callbacks.blur = [blur => set_blur(
+        blur, output_blur_el, output_blur_hist_el,
+        input_blur_kernel_width_el, input_blur_kernel_height_el, input_blur_kernel_size_el, input_blur_diameter_el,
+        input_sigma_x_el, input_sigma_y_el, input_sigma_color_el, input_sigma_space_el)]
+    callbacks.blur_kernel_width = [() => blur_img(output_blur_el, output_blur_hist_el)]
+    callbacks.blur_kernel_height = [() => blur_img(output_blur_el, output_blur_hist_el)]
+    callbacks.blur_kernel_size = [() => blur_img(output_blur_el, output_blur_hist_el)]
+    callbacks.blur_diameter = [() => blur_img(output_blur_el, output_blur_hist_el)]
+    callbacks.sigma_x = [() => blur_img(output_blur_el, output_blur_hist_el)]
+    callbacks.sigma_y = [() => blur_img(output_blur_el, output_blur_hist_el)]
+    callbacks.sigma_color = [() => blur_img(output_blur_el, output_blur_hist_el)]
+    callbacks.sigma_space = [() => blur_img(output_blur_el, output_blur_hist_el)]
+    callbacks.blur_hist = [blur_hist => set_blur_hist(blur_hist, output_blur_el, output_blur_hist_el)]
+    input_blur_el.onchange = get_check_set_load("blur")
+    input_blur_kernel_width_el.onchange = get_check_set_load("blur_kernel_width", parseInt)
+    input_blur_kernel_height_el.onchange = get_check_set_load("blur_kernel_height", parseInt)
+    input_blur_kernel_size_el.onchange = get_check_set_load("blur_kernel_size", parseInt)
+    input_blur_diameter_el.onchange = get_check_set_load("blur_diameter", parseInt)
+    input_sigma_x_el.onchange = get_check_set_load("sigma_x", parseFloat)
+    input_sigma_y_el.onchange = get_check_set_load("sigma_y", parseFloat)
+    input_sigma_color_el.onchange = get_check_set_load("sigma_color", parseInt)
+    input_sigma_space_el.onchange = get_check_set_load("sigma_space", parseInt)
+    input_blur_hist_el.onchange = get_check_set_load("blur_hist", identity, get_checked)
     change(input_blur_el)
+    change(input_blur_kernel_width_el)
+    change(input_blur_kernel_height_el)
+    change(input_blur_kernel_size_el)
+    change(input_blur_diameter_el)
+    change(input_sigma_x_el)
+    change(input_sigma_y_el)
+    change(input_sigma_color_el)
+    change(input_sigma_space_el)
+    change(input_blur_hist_el)
     //
     // stage 4 - threshold
     //
-    // grab stage output els
     const output_threshold_el = document.getElementById("output-threshold")
     const output_threshold_hist_el = document.getElementById("output-threshold-hist")
-    // react to stage end
-    callbacks.mat_blur = [() => threshold_img(output_threshold_el, output_threshold_hist_el)]
-    // same steps for value input
-    const input_threshold_value_el = document.getElementById("input-threshold-value")
-    callbacks.threshold_value = [() => threshold_img(output_threshold_el, output_threshold_hist_el)]
-    input_threshold_value_el.onchange = () => load_threshold_value(input_threshold_value_el)
-    change(input_threshold_value_el)
-    // same steps for max input
-    const input_threshold_max_el = document.getElementById("input-threshold-max")
-    callbacks.threshold_max = [() => threshold_img(output_threshold_el, output_threshold_hist_el)]
-    input_threshold_max_el.onchange = () => load_threshold_max(input_threshold_max_el)
-    change(input_threshold_max_el)
-    // same steps for block input
-    const input_threshold_block_el = document.getElementById("input-threshold-block")
-    callbacks.threshold_block = [() => threshold_img(output_threshold_el, output_threshold_hist_el)]
-    input_threshold_block_el.onchange = () => load_threshold_block(input_threshold_block_el)
-    change(input_threshold_block_el)
-    // same steps for constant input
-    const input_threshold_constant_el = document.getElementById("input-threshold-constant")
-    callbacks.threshold_constant = [() => threshold_img(output_threshold_el, output_threshold_hist_el)]
-    input_threshold_constant_el.onchange = () => load_threshold_constant(input_threshold_constant_el)
-    change(input_threshold_constant_el)
-    // same steps for histogram input
-    const input_threshold_hist_el = document.getElementById("input-threshold-hist")
-    callbacks.threshold_hist = [threshold_hist => set_threshold_hist(threshold_hist, output_threshold_el, output_threshold_hist_el)]
-    input_threshold_hist_el.onchange = () => load_threshold_hist(input_threshold_hist_el)
-    change(input_threshold_hist_el)
-    // same steps for threshold input
     const input_threshold_el = document.getElementById("input-threshold")
+    const input_threshold_value_el = document.getElementById("input-threshold-value")
+    const input_threshold_max_el = document.getElementById("input-threshold-max")
     const input_optimal_threshold_el = document.getElementById("input-optimal-threshold")
     const input_adaptive_threshold_el = document.getElementById("input-adaptive-threshold")
-    callbacks.threshold = [threshold => set_threshold(threshold, output_threshold_el, output_threshold_hist_el, input_threshold_value_el, input_threshold_max_el, input_optimal_threshold_el, input_adaptive_threshold_el, input_threshold_block_el, input_threshold_constant_el)]
-    callbacks.optimal_threshold = [() => set_threshold(state.threshold, output_threshold_el, output_threshold_hist_el, input_threshold_value_el, input_threshold_max_el, input_optimal_threshold_el, input_adaptive_threshold_el, input_threshold_block_el, input_threshold_constant_el)]
-    callbacks.adaptive_threshold = [() => set_threshold(state.threshold, output_threshold_el, output_threshold_hist_el, input_threshold_value_el, input_threshold_max_el, input_optimal_threshold_el, input_adaptive_threshold_el, input_threshold_block_el, input_threshold_constant_el)]
-    input_threshold_el.onchange = () => load_threshold(input_threshold_el)
-    input_optimal_threshold_el.onchange = () => load_optimal_threshold(input_optimal_threshold_el)
-    input_adaptive_threshold_el.onchange = () => load_adaptive_threshold(input_adaptive_threshold_el)
+    const input_threshold_block_el = document.getElementById("input-threshold-block")
+    const input_threshold_constant_el = document.getElementById("input-threshold-constant")
+    const input_threshold_hist_el = document.getElementById("input-threshold-hist")
+    callbacks.mat_blur = [() => threshold_img(output_threshold_el, output_threshold_hist_el)]
+    callbacks.threshold = [threshold => set_threshold(
+        threshold, output_threshold_el, output_threshold_hist_el,
+        input_threshold_value_el, input_threshold_max_el,
+        input_optimal_threshold_el, input_adaptive_threshold_el,
+        input_threshold_block_el, input_threshold_constant_el)]
+    callbacks.threshold_value = [() => threshold_img(output_threshold_el, output_threshold_hist_el)]
+    callbacks.threshold_max = [() => threshold_img(output_threshold_el, output_threshold_hist_el)]
+    callbacks.optimal_threshold = [() => set_threshold(
+        state.threshold, output_threshold_el, output_threshold_hist_el,
+        input_threshold_value_el, input_threshold_max_el,
+        input_optimal_threshold_el, input_adaptive_threshold_el,
+        input_threshold_block_el, input_threshold_constant_el)]
+    callbacks.adaptive_threshold = [() => set_threshold(
+        state.threshold, output_threshold_el, output_threshold_hist_el,
+        input_threshold_value_el, input_threshold_max_el,
+        input_optimal_threshold_el, input_adaptive_threshold_el,
+        input_threshold_block_el, input_threshold_constant_el)]
+    callbacks.threshold_block = [() => threshold_img(output_threshold_el, output_threshold_hist_el)]
+    callbacks.threshold_constant = [() => threshold_img(output_threshold_el, output_threshold_hist_el)]
+    callbacks.threshold_hist = [threshold_hist => set_threshold_hist(threshold_hist, output_threshold_el, output_threshold_hist_el)]
+    input_threshold_el.onchange = get_check_set_load("threshold")
+    input_threshold_value_el.onchange = get_check_set_load("threshold_value", parseInt)
+    input_threshold_max_el.onchange = get_check_set_load("threshold_max", parseInt)
+    input_optimal_threshold_el.onchange = get_check_set_load("optimal_threshold")
+    input_adaptive_threshold_el.onchange = get_check_set_load("adaptive_threshold")
+    input_threshold_block_el.onchange = get_check_set_load("threshold_block", parseInt)
+    input_threshold_constant_el.onchange = get_check_set_load("threshold_constant", parseInt)
+    input_threshold_hist_el.onchange = get_check_set_load("threshold_hist", identity, get_checked)
     change(input_threshold_el)
+    change(input_threshold_value_el)
+    change(input_threshold_max_el)
     change(input_optimal_threshold_el)
     change(input_adaptive_threshold_el)
+    change(input_threshold_block_el)
+    change(input_threshold_constant_el)
+    change(input_threshold_hist_el)
 }
 
 

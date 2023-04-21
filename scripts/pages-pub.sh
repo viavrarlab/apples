@@ -9,3 +9,4 @@ git add .
 git commit -m 'Updated pages.'
 git push origin pages
 git push hub pages
+git push via pages
