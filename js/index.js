@@ -103,6 +103,42 @@ function plot_hist(src, dst_el, rows = undefined, bins = 256, min = 0, max = 256
 }
 
 
+// execute callback per channel
+function exec_channels(src, dst, callback) {
+    // grab and check channels
+    const channels = src.channels()
+    if (channels == 1) return callback(src, dst)
+    // got multiple channels, initialize vectors
+    const srcs = new cv.MatVector()
+    const dsts = new cv.MatVector()
+    try {
+        // split image and loop channels
+        cv.split(src, srcs)
+        let channel = -1
+        while (++channel < channels) {
+            // grab src and dst for channel
+            const _src = srcs.get(channel)
+            const _dst = new cv.Mat()
+            try {
+                // execute callback and save dst
+                callback(_src, _dst)
+                dsts.push_back(_dst)
+            } finally {
+                // seems that vectors use protective copy, delete the ones we got
+                _src.delete()
+                _dst.delete()
+            }
+        }
+        // merge channels back
+        cv.merge(dsts, dst)
+    } finally {
+        // delete vectors
+        srcs.delete()
+        dsts.delete()
+    }
+}
+
+
 
 
 
@@ -112,6 +148,7 @@ function plot_hist(src, dst_el, rows = undefined, bins = 256, min = 0, max = 256
 
 
 
+// load image and video
 function load_src(src, type) {
     // src is already prepared, simply check type and set on internal state
     if (type.startsWith("image")) state.img_src = URL.createObjectURL(src)
@@ -138,11 +175,12 @@ function set_video_src(video_src, img_el, video_el, input_playback_rate_el, inpu
     video_el.src = video_src
     video_el.hidden = false
     // seems that we also need to reset video specific options
-    set_playback_rate(state.playback_rate, video_el)
-    set_loop(state.loop, video_el)
+    video_el.playbackRate = state.playback_rate
+    video_el.loop = state.loop
 }
 
 
+// load from file and url
 function load_file(input_file_el) {
     // check el and files and load the first
     if (input_file_el.reportValidity() && input_file_el.files.length) load_src(input_file_el.files[0], input_file_el.files[0].type)
@@ -177,6 +215,7 @@ async function load_url(input_url_el, proxies) {
 }
 
 
+// load from drag & drop
 function load_drop(ev, input_file_el, input_url_el, submit_fetch_el) {
     // stop browser from default and check if its files or urls
     ev.preventDefault()
@@ -193,6 +232,7 @@ function load_drop(ev, input_file_el, input_url_el, submit_fetch_el) {
 }
 
 
+// generate histogram
 function set_hist(hist, output_hist_el) {
     // hide based on value and reload if histogram is required
     output_hist_el.hidden = !hist
@@ -209,6 +249,7 @@ function set_hist(hist, output_hist_el) {
 
 
 
+// remember and load initial image
 function save_load(load) {
     // store and execute load function
     state.load = load
@@ -241,6 +282,7 @@ function load_img(src_el, dst_el, canvas_el, canvas_ctx, width, height, hist_el,
 }
 
 
+// process video at given fps
 function load_play(video_el) {
     // simply set on internal state
     state.play = !video_el.paused && !video_el.ended
@@ -268,6 +310,7 @@ function set_play(play) {
 }
 
 
+// generate histogram
 function set_initial_hist(initial_hist, output_initial_hist_el) {
     // hide based on value and reload if histogram is required
     output_initial_hist_el.hidden = !initial_hist
@@ -284,6 +327,7 @@ function set_initial_hist(initial_hist, output_initial_hist_el) {
 
 
 
+// blur image
 function blur_img(dst_el, hist_el) {
     // check if we have previous stage
     if (!state.mat_initial) return
@@ -302,7 +346,7 @@ function blur_img(dst_el, hist_el) {
                 cv.medianBlur(state.mat_initial, mat_blur, state.blur_kernel_size)
                 break
             case "bilateralFilter":
-                cv.bilateralFilter(state.mat_initial, mat_blur, state.blur_diameter, state.sigma_color, state.sigma_space)
+                exec_channels(state.mat_initial, mat_blur, (src, dst) => cv.bilateralFilter(src, dst, state.blur_diameter, state.sigma_color, state.sigma_space))
                 break
         }
         // show blured and plot histogram
@@ -319,6 +363,7 @@ function blur_img(dst_el, hist_el) {
 }
 
 
+// generate histogram
 function set_blur_hist(blur_hist, output_blur_el, output_blur_hist_el) {
     // hide based on value and reload if histogram is required
     output_blur_hist_el.hidden = !blur_hist
@@ -326,6 +371,7 @@ function set_blur_hist(blur_hist, output_blur_el, output_blur_hist_el) {
 }
 
 
+// switch inputs
 function set_blur(
     blur, output_blur_el, output_blur_hist_el,
     input_blur_kernel_width_el, input_blur_kernel_height_el, input_blur_kernel_size_el, input_blur_diameter_el,
@@ -371,6 +417,7 @@ function set_blur(
 
 
 
+// equalize image
 function equalize_img(dst_el, hist_el) {
     // check if we have previous stage
     if (!state.mat_blur) return
@@ -381,12 +428,12 @@ function equalize_img(dst_el, hist_el) {
             if (state.equalization == "CLAHE") {
                 const clahe = new cv.CLAHE(state.equalization_clip, new cv.Size(state.equalization_columns, state.equalization_rows))
                 try {
-                    clahe.apply(state.mat_blur, mat_equalization)
+                    exec_channels(state.mat_blur, mat_equalization, (src, dst) => clahe.apply(src, dst))
                 } finally {
                     clahe.delete()
                 }
             } else {
-                cv.equalizeHist(state.mat_blur, mat_equalization)
+                exec_channels(state.mat_blur, mat_equalization, cv.equalizeHist)
             }
         }
         // show equalized and plot histogram
@@ -403,6 +450,7 @@ function equalize_img(dst_el, hist_el) {
 }
 
 
+// generate histogram
 function set_equalization_hist(equalization_hist, output_equalization_el, output_equalization_hist_el) {
     // hide based on value and reload if histogram is required
     output_equalization_hist_el.hidden = !equalization_hist
@@ -410,6 +458,7 @@ function set_equalization_hist(equalization_hist, output_equalization_el, output
 }
 
 
+// switch inputs
 function set_equalization(
     equalization, output_equalization_el, output_equalization_hist_el,
     input_equalization_clip_el, input_equalization_rows_el, input_equalization_columns_el) {
@@ -435,6 +484,7 @@ function set_equalization(
 
 
 
+// threshold image
 function threshold_img(dst_el, hist_el) {
     // check if we have previous stage
     if (!state.mat_equalization) return
@@ -443,13 +493,14 @@ function threshold_img(dst_el, hist_el) {
     try {
         if (state.threshold) {
             if (state.adaptive_threshold) {
-                cv.adaptiveThreshold(
-                    state.mat_equalization, mat_threshold, state.threshold_max,
-                    cv[state.adaptive_threshold], cv[state.threshold], state.threshold_block, state.threshold_constant)
+                exec_channels(state.mat_equalization, mat_threshold, (src, dst) => cv.adaptiveThreshold(
+                    src, dst, state.threshold_max,
+                    cv[state.adaptive_threshold], cv[state.threshold],
+                    state.threshold_block, state.threshold_constant))
             } else if (state.optimal_threshold) {
-                cv.threshold(
-                    state.mat_equalization, mat_threshold, state.threshold_value, state.threshold_max,
-                    cv[state.threshold] | cv[state.optimal_threshold])
+                exec_channels(state.mat_equalization, mat_threshold, (src, dst) => cv.threshold(
+                    src, dst, state.threshold_value, state.threshold_max,
+                    cv[state.threshold] | cv[state.optimal_threshold]))
             } else {
                 cv.threshold(
                     state.mat_equalization, mat_threshold, state.threshold_value, state.threshold_max,
@@ -470,6 +521,7 @@ function threshold_img(dst_el, hist_el) {
 }
 
 
+// generate histogram
 function set_threshold_hist(threshold_hist, output_threshold_el, output_threshold_hist_el) {
     // hide based on value and reload if histogram is required
     output_threshold_hist_el.hidden = !threshold_hist
@@ -477,6 +529,7 @@ function set_threshold_hist(threshold_hist, output_threshold_el, output_threshol
 }
 
 
+// switch inputs
 function set_threshold(
     threshold, output_threshold_el, output_threshold_hist_el,
     input_threshold_value_el, input_threshold_max_el,
