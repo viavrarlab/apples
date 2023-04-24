@@ -52,7 +52,7 @@ function change(el) {
 
 
 // plot histogram
-function plot_hist(src, dst_el, bins = 256, min = 0, max = 256) {
+function plot_hist(src, dst_el, rows = undefined, bins = 256, min = 0, max = 256) {
     // need to pass src as vector
     const srcs = new cv.MatVector()
     srcs.push_back(src)
@@ -61,11 +61,11 @@ function plot_hist(src, dst_el, bins = 256, min = 0, max = 256) {
     // result histogram
     const hist = new cv.Mat()
     // result plot
-    const dst = new cv.Mat.zeros(src.rows, bins, cv.CV_8UC3)
+    const dst = new cv.Mat.zeros(rows ?? src.rows, bins, cv.CV_8UC3)
     try {
         // grab channels and calculate height of each histogram
         const channels = src.channels()
-        const height = Math.trunc(src.rows / channels)
+        const height = Math.trunc((rows ?? src.rows) / channels)
         // start with red and loop channels
         let color = new cv.Scalar(255, 0, 0)
         let channel = -1
@@ -225,7 +225,7 @@ function load_img(src_el, dst_el, canvas_el, canvas_ctx, width, height, hist_el,
     const mat_initial = cv.imread(canvas_el)
     try {
         // plot original histogram and convert color space
-        if (state.hist) plot_hist(mat_initial, hist_el)
+        if (state.hist) plot_hist(mat_initial, hist_el, src_el.height)
         if (state.color_space) cv.cvtColor(mat_initial, mat_initial, cv[state.color_space])
         // show converted and plot histogram
         cv.imshow(dst_el, mat_initial)
@@ -365,7 +365,71 @@ function set_blur(
 
 
 
-// stage 4 - threshold
+// stage 4 - histogram equalization
+
+
+
+
+
+function equalize_img(dst_el, hist_el) {
+    // check if we have previous stage
+    if (!state.mat_blur) return
+    // allocate dst if we equalize, else clone
+    const mat_equalization = state.equalization ? new cv.Mat() : state.mat_blur.clone()
+    try {
+        if (state.equalization) {
+            if (state.equalization == "CLAHE") {
+                const clahe = new cv.CLAHE(state.equalization_clip, new cv.Size(state.equalization_columns, state.equalization_rows))
+                try {
+                    clahe.apply(state.mat_blur, mat_equalization)
+                } finally {
+                    clahe.delete()
+                }
+            } else {
+                cv.equalizeHist(state.mat_blur, mat_equalization)
+            }
+        }
+        // show equalized and plot histogram
+        cv.imshow(dst_el, mat_equalization)
+        if (state.equalization_hist) plot_hist(mat_equalization, hist_el)
+    } catch (exc) {
+        // failed, delete equalized
+        mat_equalization.delete()
+        throw exc
+    }
+    // delete previous and set new
+    if (state.mat_equalization) state.mat_equalization.delete()
+    state.mat_equalization = mat_equalization
+}
+
+
+function set_equalization_hist(equalization_hist, output_equalization_el, output_equalization_hist_el) {
+    // hide based on value and reload if histogram is required
+    output_equalization_hist_el.hidden = !equalization_hist
+    if (equalization_hist) equalize_img(output_equalization_el, output_equalization_hist_el)
+}
+
+
+function set_equalization(
+    equalization, output_equalization_el, output_equalization_hist_el,
+    input_equalization_clip_el, input_equalization_rows_el, input_equalization_columns_el) {
+    if (equalization == "CLAHE") {
+        input_equalization_clip_el.disabled = false
+        input_equalization_rows_el.disabled = false
+        input_equalization_columns_el.disabled = false
+    } else {
+        input_equalization_clip_el.disabled = true
+        input_equalization_rows_el.disabled = true
+        input_equalization_columns_el.disabled = true
+    }
+    equalize_img(output_equalization_el, output_equalization_hist_el)
+}
+
+
+
+
+
+// stage 5 - threshold
 
 
 
@@ -373,22 +437,22 @@ function set_blur(
 
 function threshold_img(dst_el, hist_el) {
     // check if we have previous stage
-    if (!state.mat_blur) return
+    if (!state.mat_equalization) return
     // allocate dst if we threshold, else clone
-    const mat_threshold = state.threshold ? new cv.Mat() : state.mat_blur.clone()
+    const mat_threshold = state.threshold ? new cv.Mat() : state.mat_equalization.clone()
     try {
         if (state.threshold) {
             if (state.adaptive_threshold) {
                 cv.adaptiveThreshold(
-                    state.mat_blur, mat_threshold, state.threshold_max,
+                    state.mat_equalization, mat_threshold, state.threshold_max,
                     cv[state.adaptive_threshold], cv[state.threshold], state.threshold_block, state.threshold_constant)
             } else if (state.optimal_threshold) {
                 cv.threshold(
-                    state.mat_blur, mat_threshold, state.threshold_value, state.threshold_max,
+                    state.mat_equalization, mat_threshold, state.threshold_value, state.threshold_max,
                     cv[state.threshold] | cv[state.optimal_threshold])
             } else {
                 cv.threshold(
-                    state.mat_blur, mat_threshold, state.threshold_value, state.threshold_max,
+                    state.mat_equalization, mat_threshold, state.threshold_value, state.threshold_max,
                     cv[state.threshold])
             }
         }
@@ -626,7 +690,35 @@ function main() {
     change(input_sigma_space_el)
     change(input_blur_hist_el)
     //
-    // stage 4 - threshold
+    // stage 4 - histogram equalization
+    //
+    const output_equalization_el = document.getElementById("output-equalization")
+    const output_equalization_hist_el = document.getElementById("output-equalization-hist")
+    const input_equalization_el = document.getElementById("input-equalization")
+    const input_equalization_clip_el = document.getElementById("input-equalization-clip")
+    const input_equalization_rows_el = document.getElementById("input-equalization-rows")
+    const input_equalization_columns_el = document.getElementById("input-equalization-columns")
+    const input_equalization_hist_el = document.getElementById("input-equalization-hist")
+    callbacks.mat_blur = [() => equalize_img(output_equalization_el, output_equalization_hist_el)]
+    callbacks.equalization = [equalization => set_equalization(
+        equalization, output_equalization_el, output_equalization_hist_el,
+        input_equalization_clip_el, input_equalization_rows_el, input_equalization_columns_el)]
+    callbacks.equalization_clip = [() => equalize_img(output_equalization_el, output_equalization_hist_el)]
+    callbacks.equalization_rows = [() => equalize_img(output_equalization_el, output_equalization_hist_el)]
+    callbacks.equalization_columns = [() => equalize_img(output_equalization_el, output_equalization_hist_el)]
+    callbacks.equalization_hist = [equalization_hist => set_equalization_hist(equalization_hist, output_equalization_el, output_equalization_hist_el)]
+    input_equalization_el.onchange = get_check_set_load("equalization")
+    input_equalization_clip_el.onchange = get_check_set_load("equalization_clip", parseInt)
+    input_equalization_rows_el.onchange = get_check_set_load("equalization_rows", parseInt)
+    input_equalization_columns_el.onchange = get_check_set_load("equalization_columns", parseInt)
+    input_equalization_hist_el.onchange = get_check_set_load("equalization_hist", identity, get_checked)
+    change(input_equalization_el)
+    change(input_equalization_clip_el)
+    change(input_equalization_rows_el)
+    change(input_equalization_columns_el)
+    change(input_equalization_hist_el)
+    //
+    // stage 5 - threshold
     //
     const output_threshold_el = document.getElementById("output-threshold")
     const output_threshold_hist_el = document.getElementById("output-threshold-hist")
@@ -638,7 +730,7 @@ function main() {
     const input_threshold_block_el = document.getElementById("input-threshold-block")
     const input_threshold_constant_el = document.getElementById("input-threshold-constant")
     const input_threshold_hist_el = document.getElementById("input-threshold-hist")
-    callbacks.mat_blur = [() => threshold_img(output_threshold_el, output_threshold_hist_el)]
+    callbacks.mat_equalization = [() => threshold_img(output_threshold_el, output_threshold_hist_el)]
     callbacks.threshold = [threshold => set_threshold(
         threshold, output_threshold_el, output_threshold_hist_el,
         input_threshold_value_el, input_threshold_max_el,

@@ -208,7 +208,61 @@
                     <input id="input-blur-hist" type="checkbox" />
                 </td>
             </tr>
-            <!-- stage 4 - threshold -->
+            <!-- stage 4 - histogram equalization -->
+            <tr class="short">
+                <td rowspan="5">
+                    <canvas id="output-equalization"></canvas>
+                </td>
+                <td rowspan="5">
+                    <canvas id="output-equalization-hist" hidden="true"></canvas>
+                </td>
+                <td class="right">
+                    <label for="input-equalization">Equalization type - </label>
+                </td>
+                <td>
+                    <select id="input-equalization">
+                        <option value="" selected="true">No equalization</option>
+                        <option value="equalizeHist">Histogram equalization</option>
+                        <option value="CLAHE">CLAHE equalization</option>
+                    </select>
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-equalization-clip">Contrast limit - </label>
+                </td>
+                <td>
+                    <input id="input-equalization-clip" type="number" value="40" step="1" min="0" max="255"
+                        disabled="true" />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-equalization-rows">Rows - </label>
+                </td>
+                <td>
+                    <input id="input-equalization-rows" type="number" value="8" step="1" min="1" max="256"
+                        disabled="true" />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-equalization-columns">Columns - </label>
+                </td>
+                <td>
+                    <input id="input-equalization-columns" type="number" value="8" step="1" min="1" max="256"
+                        disabled="true" />
+                </td>
+            </tr>
+            <tr>
+                <td class="right">
+                    <label for="input-equalization-hist">Show histogram - </label>
+                </td>
+                <td>
+                    <input id="input-equalization-hist" type="checkbox" />
+                </td>
+            </tr>
+            <!-- stage 5 - threshold -->
             <tr class="short">
                 <td rowspan="8">
                     <canvas id="output-threshold"></canvas>
