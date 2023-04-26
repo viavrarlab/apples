@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
+git push origin master
+git push hub master
+git push via master
 mkdir ../apples-temp
 cp -r .git ../apples-temp/.git
 cd ../apples-temp

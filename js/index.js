@@ -53,6 +53,8 @@ function change(el) {
 
 // plot histogram
 function plot_hist(src, dst_el, rows = undefined, bins = 256, min = 0, max = 256) {
+    // coalesce rows
+    rows = (rows || undefined) ?? src.rows
     // need to pass src as vector
     const srcs = new cv.MatVector()
     srcs.push_back(src)
@@ -61,11 +63,11 @@ function plot_hist(src, dst_el, rows = undefined, bins = 256, min = 0, max = 256
     // result histogram
     const hist = new cv.Mat()
     // result plot
-    const dst = new cv.Mat.zeros(rows ?? src.rows, bins, cv.CV_8UC3)
+    const dst = new cv.Mat.zeros(rows, bins, cv.CV_8UC3)
     try {
         // grab channels and calculate height of each histogram
         const channels = src.channels()
-        const height = Math.trunc((rows ?? src.rows) / channels)
+        const height = Math.trunc(rows / channels)
         // start with red and loop channels
         let color = new cv.Scalar(255, 0, 0)
         let channel = -1
@@ -94,7 +96,7 @@ function plot_hist(src, dst_el, rows = undefined, bins = 256, min = 0, max = 256
         // show histogram
         cv.imshow(dst_el, dst)
     } finally {
-        // deallocate all
+        // delete all
         dst.delete()
         hist.delete()
         mask.delete()
@@ -255,7 +257,9 @@ function save_load(load) {
     state.load = load
     load()
 }
-function load_img(src_el, dst_el, canvas_el, canvas_ctx, width, height, hist_el, initial_hist_el) {
+function load_img(
+    src_el, dst_el, canvas_el, canvas_ctx, width, height, hist_el, initial_hist_el,
+    output_original_width_el, output_original_height_el, output_actual_fps_el) {
     // coalesce width and height
     canvas_el.width = state.width
     canvas_el.width ||= width
@@ -263,11 +267,27 @@ function load_img(src_el, dst_el, canvas_el, canvas_ctx, width, height, hist_el,
     canvas_el.height ||= height
     // resize and read new
     canvas_ctx.drawImage(src_el, 0, 0, canvas_el.width, canvas_el.height)
-    const mat_initial = cv.imread(canvas_el)
+    let mat_initial = cv.imread(canvas_el)
     try {
         // plot original histogram and convert color space
         if (state.hist) plot_hist(mat_initial, hist_el, src_el.height)
         if (state.color_space) cv.cvtColor(mat_initial, mat_initial, cv[state.color_space])
+        // extract channel
+        if (state.channel) {
+            // initialize vector
+            const channels = new cv.MatVector()
+            try {
+                // split and grab channel
+                cv.split(mat_initial, channels)
+                const channel = channels.get(state.channel - 1)
+                // delete old and swap
+                mat_initial.delete()
+                mat_initial = channel
+            } finally {
+                // delete vector
+                channels.delete()
+            }
+        }
         // show converted and plot histogram
         cv.imshow(dst_el, mat_initial)
         if (state.initial_hist) plot_hist(mat_initial, initial_hist_el)
@@ -276,6 +296,10 @@ function load_img(src_el, dst_el, canvas_el, canvas_ctx, width, height, hist_el,
         mat_initial.delete()
         throw exc
     }
+    // show original size
+    output_original_width_el.innerHTML = src_el.videoWidth ?? src_el.width
+    output_original_height_el.innerHTML = src_el.videoHeight ?? src_el.height
+    output_actual_fps_el.innerHTML = 0
     // delete previous and set new
     if (state.mat_initial) state.mat_initial.delete()
     state.mat_initial = mat_initial
@@ -287,7 +311,7 @@ function load_play(video_el) {
     // simply set on internal state
     state.play = !video_el.paused && !video_el.ended
 }
-function set_play(play) {
+function set_play(play, output_actual_fps_el) {
     if (!play || state.playing) return
     // need to play and not playing, define and schedule callback
     function callback() {
@@ -296,8 +320,11 @@ function set_play(play) {
             const start = performance.now()
             // reload
             state.load()
+            // calculate delta and show actual fps
+            const delta = performance.now() - start
+            output_actual_fps_el.innerHTML = 1000 / delta
             // calculate free time until next frame
-            const free = state.fps > 0 ? 1000 / state.fps - (performance.now() - start) : 0
+            const free = state.fps > 0 ? 1000 / state.fps - delta : 0
             // schedule next callback if we're still playing
             state.playing = state.play ? setTimeout(callback, Math.max(0, free)) : undefined
         } catch (exc) {
@@ -604,6 +631,9 @@ function main() {
     const input_playback_rate_el = document.getElementById("input-playback-rate")
     const input_loop_el = document.getElementById("input-loop")
     const input_hist_el = document.getElementById("input-hist")
+    const output_original_width_el = document.getElementById("output-original-width")
+    const output_original_height_el = document.getElementById("output-original-height")
+    const output_actual_fps_el = document.getElementById("output-actual-fps")
     // grab temp canvas and its context
     const temp_canvas_el = document.getElementById("temp-canvas")
     const temp_canvas_ctx = temp_canvas_el.getContext("2d")
@@ -615,7 +645,7 @@ function main() {
         // "https://api.allorigins.win/raw?url=",
     ]
     // register callbacks to react to internal state changes
-    callbacks.play = [set_play]
+    callbacks.play = [play => set_play(play, output_actual_fps_el)]
     callbacks.playback_rate = [playback_rate => output_video_el.playbackRate = playback_rate]
     callbacks.loop = [loop => output_video_el.loop = loop]
     callbacks.hist = [hist => set_hist(hist, output_hist_el)]
@@ -639,18 +669,21 @@ function main() {
         output_img_el, output_initial_el,
         temp_canvas_el, temp_canvas_ctx,
         output_img_el.width, output_img_el.height,
-        output_hist_el, output_initial_hist_el))
+        output_hist_el, output_initial_hist_el,
+        output_original_width_el, output_original_height_el, output_actual_fps_el))
     output_video_el.onloadeddata = () => save_load(() => load_img(
         output_video_el, output_initial_el,
         temp_canvas_el, temp_canvas_ctx,
         output_video_el.clientWidth, output_video_el.clientHeight,
-        output_hist_el, output_initial_hist_el))
+        output_hist_el, output_initial_hist_el,
+        output_original_width_el, output_original_height_el, output_actual_fps_el))
     // also react to the user seeking to a new time in video
     output_video_el.onseeked = () => load_img(
         output_video_el, output_initial_el,
         temp_canvas_el, temp_canvas_ctx,
         output_video_el.clientWidth, output_video_el.clientHeight,
-        output_hist_el, output_initial_hist_el)
+        output_hist_el, output_initial_hist_el,
+        output_original_width_el, output_original_height_el, output_actual_fps_el)
     // fire element changes to initialize and sync internal state
     load_play(output_video_el)
     change(input_file_el)
@@ -666,11 +699,13 @@ function main() {
     const input_width_el = document.getElementById("input-width")
     const input_height_el = document.getElementById("input-height")
     const input_color_space_el = document.getElementById("input-color-space")
+    const input_channel_el = document.getElementById("input-channel")
     const input_fps_el = document.getElementById("input-fps")
     const input_initial_hist_el = document.getElementById("input-initial-hist")
     callbacks.width = [() => state.load?.()]
     callbacks.height = [() => state.load?.()]
     callbacks.color_space = [() => state.load?.()]
+    callbacks.channel = [() => state.load?.()]
     callbacks.initial_hist = [initial_hist => set_initial_hist(initial_hist, output_initial_hist_el)]
     // enable fps only for video
     // note that this is monitered in set_play
@@ -679,6 +714,7 @@ function main() {
     input_width_el.onchange = get_check_set_load("width", parseInt)
     input_height_el.onchange = get_check_set_load("height", parseInt)
     input_color_space_el.onchange = get_check_set_load("color_space")
+    input_channel_el.onchange = get_check_set_load("channel", parseInt)
     input_fps_el.onchange = get_check_set_load("fps", parseInt)
     input_initial_hist_el.onchange = get_check_set_load("initial_hist", identity, get_checked)
     // dynamic options for color space based on whats available on cv
@@ -691,6 +727,7 @@ function main() {
     change(input_width_el)
     change(input_height_el)
     change(input_color_space_el)
+    change(input_channel_el)
     change(input_fps_el)
     change(input_initial_hist_el)
     //

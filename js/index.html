@@ -64,10 +64,10 @@
             </tr>
             <!-- stage 2 - initial processing -->
             <tr class="short">
-                <td rowspan="5">
+                <td rowspan="9">
                     <canvas id="output-initial"></canvas>
                 </td>
-                <td rowspan="5">
+                <td rowspan="9">
                     <canvas id="output-initial-hist" hidden="true"></canvas>
                 </td>
                 <td class="right">
@@ -79,10 +79,26 @@
             </tr>
             <tr class="short">
                 <td class="right">
+                    <label for="output-original-width">Original width - </label>
+                </td>
+                <td>
+                    <span id="output-original-width">0</span>
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
                     <label for="input-height">Height - </label>
                 </td>
                 <td>
                     <input id="input-height" type="number" value="0" step="1" min="0" max="4096" />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="output-original-height">Original height - </label>
+                </td>
+                <td>
+                    <span id="output-original-height">0</span>
                 </td>
             </tr>
             <tr class="short">
@@ -97,10 +113,32 @@
             </tr>
             <tr class="short">
                 <td class="right">
+                    <label for="input-channel">Select channel - </label>
+                </td>
+                <td>
+                    <select id="input-channel">
+                        <option value="" selected="true">All channels</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                    </select>
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
                     <label for="input-fps">FPS limit - </label>
                 </td>
                 <td>
                     <input id="input-fps" type="number" value="0" step="1" min="0" max="256" disabled="true" />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="output-actual-fps">Actual fps - </label>
+                </td>
+                <td>
+                    <span id="output-actual-fps">0</span>
                 </td>
             </tr>
             <tr>
