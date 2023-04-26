@@ -135,7 +135,7 @@
             </tr>
             <tr class="short">
                 <td class="right">
-                    <label for="output-actual-fps">Actual fps - </label>
+                    <label for="output-actual-fps">Actual FPS - </label>
                 </td>
                 <td>
                     <span id="output-actual-fps">0</span>
@@ -388,6 +388,61 @@
                 </td>
                 <td>
                     <input id="input-threshold-hist" type="checkbox" />
+                </td>
+            </tr>
+            <!-- stage 6 - canny -->
+            <tr class="short">
+                <td rowspan="6">
+                    <canvas id="output-canny"></canvas>
+                </td>
+                <td rowspan="6">
+                    <canvas id="output-canny-hist" hidden="true"></canvas>
+                </td>
+                <td class="right">
+                    <label for="input-canny">Canny edge detection - </label>
+                </td>
+                <td>
+                    <input id="input-canny" type="checkbox" />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-canny-min">Hysteresis min - </label>
+                </td>
+                <td>
+                    <input id="input-canny-min" type="number" value="50" step="1" min="0" max="255" disabled="true" />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-canny-max">Hysteresis max - </label>
+                </td>
+                <td>
+                    <input id="input-canny-max" type="number" value="100" step="1" min="0" max="255" disabled="true" />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-canny-sobel">Sobel size - </label>
+                </td>
+                <td>
+                    <input id="input-canny-sobel" type="number" value="3" step="2" min="3" max="255" disabled="true" />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-canny-l2">L2 gradient - </label>
+                </td>
+                <td>
+                    <input id="input-canny-l2" type="checkbox" disabled="true" />
+                </td>
+            </tr>
+            <tr>
+                <td class="right">
+                    <label for="input-canny-hist">Show histogram - </label>
+                </td>
+                <td>
+                    <input id="input-canny-hist" type="checkbox" />
                 </td>
             </tr>
         </tbody>

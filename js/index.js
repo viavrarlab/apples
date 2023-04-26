@@ -288,7 +288,7 @@ function load_img(
                 channels.delete()
             }
         }
-        // show converted and plot histogram
+        // show new and plot histogram
         cv.imshow(dst_el, mat_initial)
         if (state.initial_hist) plot_hist(mat_initial, initial_hist_el)
     } catch (exc) {
@@ -376,11 +376,11 @@ function blur_img(dst_el, hist_el) {
                 exec_channels(state.mat_initial, mat_blur, (src, dst) => cv.bilateralFilter(src, dst, state.blur_diameter, state.sigma_color, state.sigma_space))
                 break
         }
-        // show blured and plot histogram
+        // show new and plot histogram
         cv.imshow(dst_el, mat_blur)
         if (state.blur_hist) plot_hist(mat_blur, hist_el)
     } catch (exc) {
-        // failed, delete blured
+        // failed, delete new
         mat_blur.delete()
         throw exc
     }
@@ -463,11 +463,11 @@ function equalize_img(dst_el, hist_el) {
                 exec_channels(state.mat_blur, mat_equalization, cv.equalizeHist)
             }
         }
-        // show equalized and plot histogram
+        // show new and plot histogram
         cv.imshow(dst_el, mat_equalization)
         if (state.equalization_hist) plot_hist(mat_equalization, hist_el)
     } catch (exc) {
-        // failed, delete equalized
+        // failed, delete new
         mat_equalization.delete()
         throw exc
     }
@@ -489,15 +489,10 @@ function set_equalization_hist(equalization_hist, output_equalization_el, output
 function set_equalization(
     equalization, output_equalization_el, output_equalization_hist_el,
     input_equalization_clip_el, input_equalization_rows_el, input_equalization_columns_el) {
-    if (equalization == "CLAHE") {
-        input_equalization_clip_el.disabled = false
-        input_equalization_rows_el.disabled = false
-        input_equalization_columns_el.disabled = false
-    } else {
-        input_equalization_clip_el.disabled = true
-        input_equalization_rows_el.disabled = true
-        input_equalization_columns_el.disabled = true
-    }
+    const disabled = equalization != "CLAHE"
+    input_equalization_clip_el.disabled = disabled
+    input_equalization_rows_el.disabled = disabled
+    input_equalization_columns_el.disabled = disabled
     equalize_img(output_equalization_el, output_equalization_hist_el)
 }
 
@@ -534,11 +529,11 @@ function threshold_img(dst_el, hist_el) {
                     cv[state.threshold])
             }
         }
-        // show thresholded and plot histogram
+        // show new and plot histogram
         cv.imshow(dst_el, mat_threshold)
         if (state.threshold_hist) plot_hist(mat_threshold, hist_el)
     } catch (exc) {
-        // failed, delete thresholded
+        // failed, delete new
         mat_threshold.delete()
         throw exc
     }
@@ -583,27 +578,74 @@ function set_threshold(
             threshold_img(output_threshold_el, output_threshold_hist_el)
             return
     }
-    switch (state.optimal_threshold) {
-        case "THRESH_OTSU":
-        case "THRESH_TRIANGLE":
-            input_threshold_value_el.disabled = true
-            break
-        default:
-            input_adaptive_threshold_el.disabled = false
-            break
+    if (state.optimal_threshold) {
+        input_threshold_value_el.disabled = true
+    } else {
+        input_adaptive_threshold_el.disabled = false
     }
-    switch (state.adaptive_threshold) {
-        case "ADAPTIVE_THRESH_MEAN_C":
-        case "ADAPTIVE_THRESH_GAUSSIAN_C":
-            input_threshold_value_el.disabled = true
-            input_threshold_block_el.disabled = false
-            input_threshold_constant_el.disabled = false
-            break
-        default:
-            input_optimal_threshold_el.disabled = false
-            break
+    if (state.adaptive_threshold) {
+        input_threshold_value_el.disabled = true
+        input_threshold_block_el.disabled = false
+        input_threshold_constant_el.disabled = false
+    } else {
+        input_optimal_threshold_el.disabled = false
     }
     threshold_img(output_threshold_el, output_threshold_hist_el)
+}
+
+
+
+
+
+// stage 6 - canny
+
+
+
+
+
+// canny image
+function canny_img(dst_el, hist_el) {
+    // check if we have previous stage
+    if (!state.mat_threshold) return
+    // allocate dst if we canny, else clone
+    const mat_canny = state.canny ? new cv.Mat() : state.mat_threshold.clone()
+    try {
+        if (state.canny) exec_channels(
+            state.mat_threshold, mat_canny,
+            (src, dst) => cv.Canny(src, dst, state.canny_min, state.canny_max, state.canny_sobel, state.canny_l2))
+        // show new and plot histogram
+        cv.imshow(dst_el, mat_canny)
+        if (state.canny_hist) plot_hist(mat_canny, hist_el)
+    } catch (exc) {
+        // failed, delete new
+        mat_canny.delete()
+        throw exc
+    }
+    // delete previous and set new
+    if (state.mat_canny) state.mat_canny.delete()
+    state.mat_canny = mat_canny
+}
+
+
+// generate histogram
+function set_canny_hist(canny_hist, output_canny_el, output_canny_hist_el) {
+    // hide based on value and reload if histogram is required
+    output_canny_hist_el.hidden = !canny_hist
+    if (canny_hist) canny_img(output_canny_el, output_canny_hist_el)
+}
+
+
+// switch inputs
+function set_canny(
+    canny, output_canny_el, output_canny_hist_el,
+    input_canny_min_el, input_canny_max_el,
+    input_canny_sobel_el, input_canny_l2_el) {
+    const disabled = !canny
+    input_canny_min_el.disabled = disabled
+    input_canny_max_el.disabled = disabled
+    input_canny_sobel_el.disabled = disabled
+    input_canny_l2_el.disabled = disabled
+    canny_img(output_canny_el, output_canny_hist_el)
 }
 
 
@@ -857,6 +899,39 @@ function main() {
     change(input_threshold_block_el)
     change(input_threshold_constant_el)
     change(input_threshold_hist_el)
+    //
+    // stage 6 - canny
+    //
+    const output_canny_el = document.getElementById("output-canny")
+    const output_canny_hist_el = document.getElementById("output-canny-hist")
+    const input_canny_el = document.getElementById("input-canny")
+    const input_canny_min_el = document.getElementById("input-canny-min")
+    const input_canny_max_el = document.getElementById("input-canny-max")
+    const input_canny_sobel_el = document.getElementById("input-canny-sobel")
+    const input_canny_l2_el = document.getElementById("input-canny-l2")
+    const input_canny_hist_el = document.getElementById("input-canny-hist")
+    callbacks.mat_threshold = [() => canny_img(output_canny_el, output_canny_hist_el)]
+    callbacks.canny = [canny => set_canny(
+        canny, output_canny_el, output_canny_hist_el,
+        input_canny_min_el, input_canny_max_el,
+        input_canny_sobel_el, input_canny_l2_el)]
+    callbacks.canny_min = [() => canny_img(output_canny_el, output_canny_hist_el)]
+    callbacks.canny_max = [() => canny_img(output_canny_el, output_canny_hist_el)]
+    callbacks.canny_sobel = [() => canny_img(output_canny_el, output_canny_hist_el)]
+    callbacks.canny_l2 = [() => canny_img(output_canny_el, output_canny_hist_el)]
+    callbacks.canny_hist = [canny_hist => set_canny_hist(canny_hist, output_canny_el, output_canny_hist_el)]
+    input_canny_el.onchange = get_check_set_load("canny", identity, get_checked)
+    input_canny_min_el.onchange = get_check_set_load("canny_min", parseInt)
+    input_canny_max_el.onchange = get_check_set_load("canny_max", parseInt)
+    input_canny_sobel_el.onchange = get_check_set_load("canny_sobel", parseInt)
+    input_canny_l2_el.onchange = get_check_set_load("canny_l2", identity, get_checked)
+    input_canny_hist_el.onchange = get_check_set_load("canny_hist", identity, get_checked)
+    change(input_canny_el)
+    change(input_canny_min_el)
+    change(input_canny_max_el)
+    change(input_canny_sobel_el)
+    change(input_canny_l2_el)
+    change(input_canny_hist_el)
 }
 
 
