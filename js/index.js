@@ -132,7 +132,7 @@ function exec_channels(src, dst, callback) {
             }
         }
         // merge channels back
-        cv.merge(dsts, dst)
+        if (dst) cv.merge(dsts, dst)
     } finally {
         // delete vectors
         srcs.delete()
@@ -597,7 +597,7 @@ function set_threshold(
 
 
 
-// stage 6 - canny
+// stage 6 - canny & contours
 
 
 
@@ -608,11 +608,43 @@ function canny_img(dst_el, hist_el) {
     // check if we have previous stage
     if (!state.mat_threshold) return
     // allocate dst if we canny, else clone
-    const mat_canny = state.canny ? new cv.Mat() : state.mat_threshold.clone()
+    let mat_canny = state.canny ? new cv.Mat() : state.mat_threshold.clone()
     try {
         if (state.canny) exec_channels(
             state.mat_threshold, mat_canny,
             (src, dst) => cv.Canny(src, dst, state.canny_min, state.canny_max, state.canny_sobel, state.canny_l2))
+        if (state.contours_mode) {
+            // allocate zeros, note that cv.drawContours doesn't initialize
+            const mat_contours = cv.Mat.zeros(mat_canny.rows, mat_canny.cols, cv.CV_8UC3)
+            try {
+                // process each channel, note that there is no dst due to cv.findContours requiring cv.CV_8UC1 src while cv.drawContours cv.CV_8UC3 dst
+                exec_channels(mat_canny, undefined, src => {
+                    // allocate contours and hierarchy, note that hierarchy is effectively unused
+                    const contours = new cv.MatVector()
+                    const hierarchy = new cv.Mat()
+                    try {
+                        // find, loop and draw each contour with random color
+                        cv.findContours(src, contours, hierarchy, cv.RETR_LIST, cv[state.contours_mode])
+                        let contour = contours.size()
+                        while (contour--) cv.drawContours(
+                            mat_contours, contours, contour,
+                            new cv.Scalar(Math.floor(Math.random() * 255), Math.floor(Math.random() * 255), Math.floor(Math.random() * 255)),
+                            1, cv.LINE_8, hierarchy, 255)
+                    } finally {
+                        // delete contours and hierarchy
+                        contours.delete()
+                        hierarchy.delete()
+                    }
+                })
+                // swap mat_contours with mat_canny
+                mat_canny.delete()
+                mat_canny = mat_contours
+            } catch (exc) {
+                // failed, delete new
+                mat_contours.delete()
+                throw exc
+            }
+        }
         // show new and plot histogram
         cv.imshow(dst_el, mat_canny)
         if (state.canny_hist) plot_hist(mat_canny, hist_el)
@@ -900,7 +932,7 @@ function main() {
     change(input_threshold_constant_el)
     change(input_threshold_hist_el)
     //
-    // stage 6 - canny
+    // stage 6 - canny & contours
     //
     const output_canny_el = document.getElementById("output-canny")
     const output_canny_hist_el = document.getElementById("output-canny-hist")
@@ -909,6 +941,7 @@ function main() {
     const input_canny_max_el = document.getElementById("input-canny-max")
     const input_canny_sobel_el = document.getElementById("input-canny-sobel")
     const input_canny_l2_el = document.getElementById("input-canny-l2")
+    const input_contours_mode_el = document.getElementById("input-contours-mode")
     const input_canny_hist_el = document.getElementById("input-canny-hist")
     callbacks.mat_threshold = [() => canny_img(output_canny_el, output_canny_hist_el)]
     callbacks.canny = [canny => set_canny(
@@ -919,18 +952,21 @@ function main() {
     callbacks.canny_max = [() => canny_img(output_canny_el, output_canny_hist_el)]
     callbacks.canny_sobel = [() => canny_img(output_canny_el, output_canny_hist_el)]
     callbacks.canny_l2 = [() => canny_img(output_canny_el, output_canny_hist_el)]
+    callbacks.contours_mode = [() => canny_img(output_canny_el, output_canny_hist_el)]
     callbacks.canny_hist = [canny_hist => set_canny_hist(canny_hist, output_canny_el, output_canny_hist_el)]
     input_canny_el.onchange = get_check_set_load("canny", identity, get_checked)
     input_canny_min_el.onchange = get_check_set_load("canny_min", parseInt)
     input_canny_max_el.onchange = get_check_set_load("canny_max", parseInt)
     input_canny_sobel_el.onchange = get_check_set_load("canny_sobel", parseInt)
     input_canny_l2_el.onchange = get_check_set_load("canny_l2", identity, get_checked)
+    input_contours_mode_el.onchange = get_check_set_load("contours_mode")
     input_canny_hist_el.onchange = get_check_set_load("canny_hist", identity, get_checked)
     change(input_canny_el)
     change(input_canny_min_el)
     change(input_canny_max_el)
     change(input_canny_sobel_el)
     change(input_canny_l2_el)
+    change(input_contours_mode_el)
     change(input_canny_hist_el)
 }
 

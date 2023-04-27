@@ -390,12 +390,12 @@
                     <input id="input-threshold-hist" type="checkbox" />
                 </td>
             </tr>
-            <!-- stage 6 - canny -->
+            <!-- stage 6 - canny & contours -->
             <tr class="short">
-                <td rowspan="6">
+                <td rowspan="7">
                     <canvas id="output-canny"></canvas>
                 </td>
-                <td rowspan="6">
+                <td rowspan="7">
                     <canvas id="output-canny-hist" hidden="true"></canvas>
                 </td>
                 <td class="right">
@@ -435,6 +435,20 @@
                 </td>
                 <td>
                     <input id="input-canny-l2" type="checkbox" disabled="true" />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-contours-mode">Contour approximation mode - </label>
+                </td>
+                <td>
+                    <select id="input-contours-mode">
+                        <option value="" selected="true">No contour detection</option>
+                        <option value="CHAIN_APPROX_NONE">CHAIN_APPROX_NONE</option>
+                        <option value="CHAIN_APPROX_SIMPLE">CHAIN_APPROX_SIMPLE</option>
+                        <option value="CHAIN_APPROX_TC89_L1">CHAIN_APPROX_TC89_L1</option>
+                        <option value="CHAIN_APPROX_TC89_KCOS">CHAIN_APPROX_TC89_KCOS</option>
+                    </select>
                 </td>
             </tr>
             <tr>
