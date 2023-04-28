@@ -52,7 +52,9 @@ function change(el) {
 
 
 // plot histogram
-function plot_hist(src, dst_el, rows = undefined, bins = 256, min = 0, max = 256) {
+function plot_hist(src_el, dst_el, rows = undefined, bins = 256, min = 0, max = 256) {
+    // grab or read src
+    const src = src_el instanceof cv.Mat ? src_el : cv.imread(src_el)
     // coalesce rows
     rows = (rows || undefined) ?? src.rows
     // need to pass src as vector
@@ -96,11 +98,12 @@ function plot_hist(src, dst_el, rows = undefined, bins = 256, min = 0, max = 256
         // show histogram
         cv.imshow(dst_el, dst)
     } finally {
-        // delete all
+        // deallocate all
         dst.delete()
         hist.delete()
         mask.delete()
         srcs.delete()
+        if (!(src_el instanceof cv.Mat)) src.delete()
     }
 }
 
@@ -126,7 +129,7 @@ function exec_channels(src, dst, callback) {
                 callback(_src, _dst)
                 dsts.push_back(_dst)
             } finally {
-                // seems that vectors use protective copy, delete the ones we got
+                // seems that vectors use protective copy, deallocate the ones we got
                 _src.delete()
                 _dst.delete()
             }
@@ -134,10 +137,40 @@ function exec_channels(src, dst, callback) {
         // merge channels back
         if (dst) cv.merge(dsts, dst)
     } finally {
-        // delete vectors
+        // deallocate vectors
         srcs.delete()
         dsts.delete()
     }
+}
+
+
+// execute image processing stage
+function process_img(dst_el, hist_el, check, check_hist, previous, next, process) {
+    // check if we have previous stage
+    if (!state[previous]) return
+    // allocate next if we process, else clone
+    let mat_next = state[check] ? new cv.Mat() : state[previous].clone()
+    try {
+        mat_next = process(state[previous], mat_next)
+        // show next and plot histogram
+        cv.imshow(dst_el, mat_next)
+        if (state[check_hist]) plot_hist(mat_next, hist_el)
+    } catch (exc) {
+        // failed, deallocate next
+        mat_next.delete()
+        throw exc
+    }
+    // deallocate previous and set next
+    if (state[next]) state[next].delete()
+    state[next] = mat_next
+}
+
+
+// generate histogram
+function process_hist(hist_el, hist, mat) {
+    // hide based on value and reload if histogram is required
+    hist_el.hidden = !hist
+    if (hist && mat) plot_hist(mat, hist_el)
 }
 
 
@@ -234,14 +267,6 @@ function load_drop(ev, input_file_el, input_url_el, submit_fetch_el) {
 }
 
 
-// generate histogram
-function set_hist(hist, output_hist_el) {
-    // hide based on value and reload if histogram is required
-    output_hist_el.hidden = !hist
-    if (hist && state.load) state.load()
-}
-
-
 
 
 
@@ -280,11 +305,11 @@ function load_img(
                 // split and grab channel
                 cv.split(mat_initial, channels)
                 const channel = channels.get(state.channel - 1)
-                // delete old and swap
+                // deallocate old and swap
                 mat_initial.delete()
                 mat_initial = channel
             } finally {
-                // delete vector
+                // deallocate vector
                 channels.delete()
             }
         }
@@ -292,7 +317,7 @@ function load_img(
         cv.imshow(dst_el, mat_initial)
         if (state.initial_hist) plot_hist(mat_initial, initial_hist_el)
     } catch (exc) {
-        // failed, delete new
+        // failed, deallocate new
         mat_initial.delete()
         throw exc
     }
@@ -300,7 +325,7 @@ function load_img(
     output_original_width_el.innerHTML = src_el.videoWidth ?? src_el.width
     output_original_height_el.innerHTML = src_el.videoHeight ?? src_el.height
     output_actual_fps_el.innerHTML = 0
-    // delete previous and set new
+    // deallocate previous and set new
     if (state.mat_initial) state.mat_initial.delete()
     state.mat_initial = mat_initial
 }
@@ -337,14 +362,6 @@ function set_play(play, output_actual_fps_el) {
 }
 
 
-// generate histogram
-function set_initial_hist(initial_hist, output_initial_hist_el) {
-    // hide based on value and reload if histogram is required
-    output_initial_hist_el.hidden = !initial_hist
-    if (initial_hist && state.load) state.load()
-}
-
-
 
 
 
@@ -355,52 +372,29 @@ function set_initial_hist(initial_hist, output_initial_hist_el) {
 
 
 // blur image
-function blur_img(dst_el, hist_el) {
-    // check if we have previous stage
-    if (!state.mat_initial) return
-    // allocate dst if we blur, else clone
-    const mat_blur = state.blur ? new cv.Mat() : state.mat_initial.clone()
-    try {
-        // blur based on type
-        switch (state.blur) {
-            case "blur":
-                cv.blur(state.mat_initial, mat_blur, new cv.Size(state.blur_kernel_width, state.blur_kernel_height))
-                break
-            case "GaussianBlur":
-                cv.GaussianBlur(state.mat_initial, mat_blur, new cv.Size(state.blur_kernel_width, state.blur_kernel_height), state.sigma_x, state.sigma_y)
-                break
-            case "medianBlur":
-                cv.medianBlur(state.mat_initial, mat_blur, state.blur_kernel_size)
-                break
-            case "bilateralFilter":
-                exec_channels(state.mat_initial, mat_blur, (src, dst) => cv.bilateralFilter(src, dst, state.blur_diameter, state.sigma_color, state.sigma_space))
-                break
-        }
-        // show new and plot histogram
-        cv.imshow(dst_el, mat_blur)
-        if (state.blur_hist) plot_hist(mat_blur, hist_el)
-    } catch (exc) {
-        // failed, delete new
-        mat_blur.delete()
-        throw exc
+function blur_img(mat_previous, mat_next) {
+    // blur based on type
+    switch (state.blur) {
+        case "blur":
+            cv.blur(mat_previous, mat_next, new cv.Size(state.blur_kernel_width, state.blur_kernel_height))
+            break
+        case "GaussianBlur":
+            cv.GaussianBlur(mat_previous, mat_next, new cv.Size(state.blur_kernel_width, state.blur_kernel_height), state.sigma_x, state.sigma_y)
+            break
+        case "medianBlur":
+            cv.medianBlur(mat_previous, mat_next, state.blur_kernel_size)
+            break
+        case "bilateralFilter":
+            exec_channels(mat_previous, mat_next, (src, dst) => cv.bilateralFilter(src, dst, state.blur_diameter, state.sigma_color, state.sigma_space))
+            break
     }
-    // delete previous and set new
-    if (state.mat_blur) state.mat_blur.delete()
-    state.mat_blur = mat_blur
-}
-
-
-// generate histogram
-function set_blur_hist(blur_hist, output_blur_el, output_blur_hist_el) {
-    // hide based on value and reload if histogram is required
-    output_blur_hist_el.hidden = !blur_hist
-    if (blur_hist) blur_img(output_blur_el, output_blur_hist_el)
+    return mat_next
 }
 
 
 // switch inputs
 function set_blur(
-    blur, output_blur_el, output_blur_hist_el,
+    blur,
     input_blur_kernel_width_el, input_blur_kernel_height_el, input_blur_kernel_size_el, input_blur_diameter_el,
     input_sigma_x_el, input_sigma_y_el, input_sigma_color_el, input_sigma_space_el) {
     input_blur_kernel_width_el.disabled = true
@@ -431,7 +425,6 @@ function set_blur(
             input_sigma_space_el.disabled = false
             break
     }
-    blur_img(output_blur_el, output_blur_hist_el)
 }
 
 
@@ -445,55 +438,31 @@ function set_blur(
 
 
 // equalize image
-function equalize_img(dst_el, hist_el) {
-    // check if we have previous stage
-    if (!state.mat_blur) return
-    // allocate dst if we equalize, else clone
-    const mat_equalization = state.equalization ? new cv.Mat() : state.mat_blur.clone()
-    try {
-        if (state.equalization) {
-            if (state.equalization == "CLAHE") {
-                const clahe = new cv.CLAHE(state.equalization_clip, new cv.Size(state.equalization_columns, state.equalization_rows))
-                try {
-                    exec_channels(state.mat_blur, mat_equalization, (src, dst) => clahe.apply(src, dst))
-                } finally {
-                    clahe.delete()
-                }
-            } else {
-                exec_channels(state.mat_blur, mat_equalization, cv.equalizeHist)
+function equalize_img(mat_previous, mat_next) {
+    if (state.equalization) {
+        if (state.equalization == "CLAHE") {
+            const clahe = new cv.CLAHE(state.equalization_clip, new cv.Size(state.equalization_columns, state.equalization_rows))
+            try {
+                exec_channels(mat_previous, mat_next, (src, dst) => clahe.apply(src, dst))
+            } finally {
+                clahe.delete()
             }
+        } else {
+            exec_channels(mat_previous, mat_next, cv.equalizeHist)
         }
-        // show new and plot histogram
-        cv.imshow(dst_el, mat_equalization)
-        if (state.equalization_hist) plot_hist(mat_equalization, hist_el)
-    } catch (exc) {
-        // failed, delete new
-        mat_equalization.delete()
-        throw exc
     }
-    // delete previous and set new
-    if (state.mat_equalization) state.mat_equalization.delete()
-    state.mat_equalization = mat_equalization
-}
-
-
-// generate histogram
-function set_equalization_hist(equalization_hist, output_equalization_el, output_equalization_hist_el) {
-    // hide based on value and reload if histogram is required
-    output_equalization_hist_el.hidden = !equalization_hist
-    if (equalization_hist) equalize_img(output_equalization_el, output_equalization_hist_el)
+    return mat_next
 }
 
 
 // switch inputs
 function set_equalization(
-    equalization, output_equalization_el, output_equalization_hist_el,
+    equalization,
     input_equalization_clip_el, input_equalization_rows_el, input_equalization_columns_el) {
     const disabled = equalization != "CLAHE"
     input_equalization_clip_el.disabled = disabled
     input_equalization_rows_el.disabled = disabled
     input_equalization_columns_el.disabled = disabled
-    equalize_img(output_equalization_el, output_equalization_hist_el)
 }
 
 
@@ -507,53 +476,30 @@ function set_equalization(
 
 
 // threshold image
-function threshold_img(dst_el, hist_el) {
-    // check if we have previous stage
-    if (!state.mat_equalization) return
-    // allocate dst if we threshold, else clone
-    const mat_threshold = state.threshold ? new cv.Mat() : state.mat_equalization.clone()
-    try {
-        if (state.threshold) {
-            if (state.adaptive_threshold) {
-                exec_channels(state.mat_equalization, mat_threshold, (src, dst) => cv.adaptiveThreshold(
-                    src, dst, state.threshold_max,
-                    cv[state.adaptive_threshold], cv[state.threshold],
-                    state.threshold_block, state.threshold_constant))
-            } else if (state.optimal_threshold) {
-                exec_channels(state.mat_equalization, mat_threshold, (src, dst) => cv.threshold(
-                    src, dst, state.threshold_value, state.threshold_max,
-                    cv[state.threshold] | cv[state.optimal_threshold]))
-            } else {
-                cv.threshold(
-                    state.mat_equalization, mat_threshold, state.threshold_value, state.threshold_max,
-                    cv[state.threshold])
-            }
+function threshold_img(mat_previous, mat_next) {
+    if (state.threshold) {
+        if (state.adaptive_threshold) {
+            exec_channels(mat_previous, mat_next, (src, dst) => cv.adaptiveThreshold(
+                src, dst, state.threshold_max,
+                cv[state.adaptive_threshold], cv[state.threshold],
+                state.threshold_block, state.threshold_constant))
+        } else if (state.optimal_threshold) {
+            exec_channels(mat_previous, mat_next, (src, dst) => cv.threshold(
+                src, dst, state.threshold_value, state.threshold_max,
+                cv[state.threshold] | cv[state.optimal_threshold]))
+        } else {
+            cv.threshold(
+                mat_previous, mat_next, state.threshold_value, state.threshold_max,
+                cv[state.threshold])
         }
-        // show new and plot histogram
-        cv.imshow(dst_el, mat_threshold)
-        if (state.threshold_hist) plot_hist(mat_threshold, hist_el)
-    } catch (exc) {
-        // failed, delete new
-        mat_threshold.delete()
-        throw exc
     }
-    // delete previous and set new
-    if (state.mat_threshold) state.mat_threshold.delete()
-    state.mat_threshold = mat_threshold
-}
-
-
-// generate histogram
-function set_threshold_hist(threshold_hist, output_threshold_el, output_threshold_hist_el) {
-    // hide based on value and reload if histogram is required
-    output_threshold_hist_el.hidden = !threshold_hist
-    if (threshold_hist) threshold_img(output_threshold_el, output_threshold_hist_el)
+    return mat_next
 }
 
 
 // switch inputs
 function set_threshold(
-    threshold, output_threshold_el, output_threshold_hist_el,
+    threshold,
     input_threshold_value_el, input_threshold_max_el,
     input_optimal_threshold_el, input_adaptive_threshold_el,
     input_threshold_block_el, input_threshold_constant_el) {
@@ -575,7 +521,6 @@ function set_threshold(
             input_threshold_value_el.disabled = false
             break
         default:
-            threshold_img(output_threshold_el, output_threshold_hist_el)
             return
     }
     if (state.optimal_threshold) {
@@ -590,7 +535,6 @@ function set_threshold(
     } else {
         input_optimal_threshold_el.disabled = false
     }
-    threshold_img(output_threshold_el, output_threshold_hist_el)
 }
 
 
@@ -604,72 +548,49 @@ function set_threshold(
 
 
 // canny image
-function canny_img(dst_el, hist_el) {
-    // check if we have previous stage
-    if (!state.mat_threshold) return
-    // allocate dst if we canny, else clone
-    let mat_canny = state.canny ? new cv.Mat() : state.mat_threshold.clone()
-    try {
-        if (state.canny) exec_channels(
-            state.mat_threshold, mat_canny,
-            (src, dst) => cv.Canny(src, dst, state.canny_min, state.canny_max, state.canny_sobel, state.canny_l2))
-        if (state.contours_mode) {
-            // allocate zeros, note that cv.drawContours doesn't initialize
-            const mat_contours = cv.Mat.zeros(mat_canny.rows, mat_canny.cols, cv.CV_8UC3)
-            try {
-                // process each channel, note that there is no dst due to cv.findContours requiring cv.CV_8UC1 src while cv.drawContours cv.CV_8UC3 dst
-                exec_channels(mat_canny, undefined, src => {
-                    // allocate contours and hierarchy, note that hierarchy is effectively unused
-                    const contours = new cv.MatVector()
-                    const hierarchy = new cv.Mat()
-                    try {
-                        // find, loop and draw each contour with random color
-                        cv.findContours(src, contours, hierarchy, cv.RETR_LIST, cv[state.contours_mode])
-                        let contour = contours.size()
-                        while (contour--) cv.drawContours(
-                            mat_contours, contours, contour,
-                            new cv.Scalar(Math.floor(Math.random() * 255), Math.floor(Math.random() * 255), Math.floor(Math.random() * 255)),
-                            1, cv.LINE_8, hierarchy, 255)
-                    } finally {
-                        // delete contours and hierarchy
-                        contours.delete()
-                        hierarchy.delete()
-                    }
-                })
-                // swap mat_contours with mat_canny
-                mat_canny.delete()
-                mat_canny = mat_contours
-            } catch (exc) {
-                // failed, delete new
-                mat_contours.delete()
-                throw exc
-            }
+function canny_img(mat_previous, mat_next) {
+    if (state.canny) exec_channels(
+        mat_previous, mat_next,
+        (src, dst) => cv.Canny(src, dst, state.canny_min, state.canny_max, state.canny_sobel, state.canny_l2))
+    if (state.contours_mode) {
+        // allocate zeros, note that cv.drawContours doesn't initialize
+        const mat_contours = cv.Mat.zeros(mat_next.rows, mat_next.cols, cv.CV_8UC3)
+        try {
+            // process each channel, note that there is no dst due to cv.findContours requiring cv.CV_8UC1 src while cv.drawContours cv.CV_8UC3 dst
+            exec_channels(mat_next, undefined, src => {
+                // allocate contours and hierarchy, note that hierarchy is effectively unused
+                const contours = new cv.MatVector()
+                const hierarchy = new cv.Mat()
+                try {
+                    // find, loop and draw each contour with random color
+                    cv.findContours(src, contours, hierarchy, cv.RETR_LIST, cv[state.contours_mode])
+                    let contour = contours.size()
+                    while (contour--) cv.drawContours(
+                        mat_contours, contours, contour,
+                        new cv.Scalar(Math.floor(Math.random() * 255), Math.floor(Math.random() * 255), Math.floor(Math.random() * 255)),
+                        1, cv.LINE_8, hierarchy, 255)
+                } finally {
+                    // deallocate contours and hierarchy
+                    contours.delete()
+                    hierarchy.delete()
+                }
+            })
+            // swap mat_contours with mat_next
+            mat_next.delete()
+            mat_next = mat_contours
+        } catch (exc) {
+            // failed, deallocate mat_contours
+            mat_contours.delete()
+            throw exc
         }
-        // show new and plot histogram
-        cv.imshow(dst_el, mat_canny)
-        if (state.canny_hist) plot_hist(mat_canny, hist_el)
-    } catch (exc) {
-        // failed, delete new
-        mat_canny.delete()
-        throw exc
     }
-    // delete previous and set new
-    if (state.mat_canny) state.mat_canny.delete()
-    state.mat_canny = mat_canny
-}
-
-
-// generate histogram
-function set_canny_hist(canny_hist, output_canny_el, output_canny_hist_el) {
-    // hide based on value and reload if histogram is required
-    output_canny_hist_el.hidden = !canny_hist
-    if (canny_hist) canny_img(output_canny_el, output_canny_hist_el)
+    return mat_next
 }
 
 
 // switch inputs
 function set_canny(
-    canny, output_canny_el, output_canny_hist_el,
+    canny,
     input_canny_min_el, input_canny_max_el,
     input_canny_sobel_el, input_canny_l2_el) {
     const disabled = !canny
@@ -677,7 +598,6 @@ function set_canny(
     input_canny_max_el.disabled = disabled
     input_canny_sobel_el.disabled = disabled
     input_canny_l2_el.disabled = disabled
-    canny_img(output_canny_el, output_canny_hist_el)
 }
 
 
@@ -691,72 +611,55 @@ function set_canny(
 
 
 // hough image
-function hough_img(dst_el, hist_el) {
-    // check if we have previous stage
-    if (!state.mat_canny) return
-    // allocate dst if we hough, else clone
-    const mat_hough = state.hough ? new cv.Mat() : state.mat_canny.clone()
-    try {
-        if (state.hough) exec_channels(state.mat_canny, mat_hough, (src, dst) => {
-            dst.create(src.rows, src.cols, cv.CV_8UC1)
-            dst.setTo(new cv.Scalar(0))
-            const color = new cv.Scalar(255)
-            const lines = new cv.Mat()
-            try {
-                if (state.hough == "HoughLines") {
-                    cv.HoughLines(
-                        src, lines, state.hough_rho, state.hough_theta * Math.PI / 180, state.hough_threshold,
-                        state.hough_srn, state.hough_stn, state.hough_theta_min, state.hough_theta_max)
-                    let line = lines.rows * 2
-                    while ((line -= 2) >= 0) {
-                        const rho = lines.data32F[line]
-                        const theta = lines.data32F[line + 1]
-                        const a = Math.cos(theta)
-                        const b = Math.sin(theta)
-                        const x = a * rho
-                        const y = b * rho
-                        cv.line(
-                            dst, new cv.Point(Math.floor(x - 1000 * b), Math.floor(y + 1000 * a)),
-                            new cv.Point(Math.floor(x + 1000 * b), Math.floor(y - 1000 * a)), color)
-                    }
-                } else {
-                    cv.HoughLinesP(
-                        src, lines, state.hough_rho, state.hough_theta * Math.PI / 180, state.hough_threshold,
-                        state.hough_min_length, state.hough_max_gap)
-                    let line = lines.rows * 4
-                    while ((line -= 4) >= 0) cv.line(
-                        dst, new cv.Point(lines.data32S[line], lines.data32S[line + 1]),
-                        new cv.Point(lines.data32S[line + 2], lines.data32S[line + 3]), color)
+function hough_img(mat_previous, mat_next) {
+    if (state.hough) exec_channels(mat_previous, mat_next, (src, dst) => {
+        // initialize dst and color since we draw manually
+        dst.create(src.rows, src.cols, cv.CV_8UC1)
+        dst.setTo(new cv.Scalar(0))
+        const color = new cv.Scalar(255)
+        // allocate lines and check hough
+        const lines = new cv.Mat()
+        try {
+            if (state.hough == "HoughLines") {
+                // standard, execute and loop lines
+                cv.HoughLines(
+                    src, lines, state.hough_rho, state.hough_theta * Math.PI / 180, state.hough_threshold,
+                    state.hough_srn, state.hough_stn, state.hough_theta_min, state.hough_theta_max)
+                let line = lines.rows * 2
+                while ((line -= 2) >= 0) {
+                    // draw line, see https://docs.opencv.org/3.4/d3/de6/tutorial_js_houghlines.html
+                    const rho = lines.data32F[line]
+                    const theta = lines.data32F[line + 1]
+                    const a = Math.cos(theta)
+                    const b = Math.sin(theta)
+                    const x = a * rho
+                    const y = b * rho
+                    cv.line(
+                        dst, new cv.Point(Math.floor(x - 1000 * b), Math.floor(y + 1000 * a)),
+                        new cv.Point(Math.floor(x + 1000 * b), Math.floor(y - 1000 * a)), color)
                 }
-            } finally {
-                lines.delete()
+            } else {
+                // probabilistic, execute, loop and draw lines
+                cv.HoughLinesP(
+                    src, lines, state.hough_rho, state.hough_theta * Math.PI / 180, state.hough_threshold,
+                    state.hough_min_length, state.hough_max_gap)
+                let line = lines.rows * 4
+                while ((line -= 4) >= 0) cv.line(
+                    dst, new cv.Point(lines.data32S[line], lines.data32S[line + 1]),
+                    new cv.Point(lines.data32S[line + 2], lines.data32S[line + 3]), color)
             }
-        })
-        // show new and plot histogram
-        cv.imshow(dst_el, mat_hough)
-        if (state.hough_hist) plot_hist(mat_hough, hist_el)
-    } catch (exc) {
-        // failed, delete new
-        mat_hough.delete()
-        throw exc
-    }
-    // delete previous and set new
-    if (state.mat_hough) state.mat_hough.delete()
-    state.mat_hough = mat_hough
-}
-
-
-// generate histogram
-function set_hough_hist(hough_hist, output_hough_el, output_hough_hist_el) {
-    // hide based on value and reload if histogram is required
-    output_hough_hist_el.hidden = !hough_hist
-    if (hough_hist) hough_img(output_hough_el, output_hough_hist_el)
+        } finally {
+            // deallocate lines
+            lines.delete()
+        }
+    })
+    return mat_next
 }
 
 
 // switch inputs
 function set_hough(
-    hough, output_hough_el, output_hough_hist_el,
+    hough,
     input_hough_rho_el, input_hough_theta_el, input_hough_threshold_el,
     input_hough_srn_el, input_hough_stn_el,
     input_hough_theta_min_el, input_hough_theta_max_el,
@@ -788,7 +691,6 @@ function set_hough(
             input_hough_max_gap_el.disabled = false
             break
     }
-    hough_img(output_hough_el, output_hough_hist_el)
 }
 
 
@@ -829,11 +731,23 @@ function main() {
         // "https://crossorigin.me/",
         // "https://api.allorigins.win/raw?url=",
     ]
+    const callback_load_img = () => load_img(
+        output_img_el, output_initial_el,
+        temp_canvas_el, temp_canvas_ctx,
+        output_img_el.width, output_img_el.height,
+        output_hist_el, output_initial_hist_el,
+        output_original_width_el, output_original_height_el, output_actual_fps_el)
+    const callback_load_video = () => load_img(
+        output_video_el, output_initial_el,
+        temp_canvas_el, temp_canvas_ctx,
+        output_video_el.clientWidth, output_video_el.clientHeight,
+        output_hist_el, output_initial_hist_el,
+        output_original_width_el, output_original_height_el, output_actual_fps_el)
     // register callbacks to react to internal state changes
     callbacks.play = [play => set_play(play, output_actual_fps_el)]
     callbacks.playback_rate = [playback_rate => output_video_el.playbackRate = playback_rate]
     callbacks.loop = [loop => output_video_el.loop = loop]
-    callbacks.hist = [hist => set_hist(hist, output_hist_el)]
+    callbacks.hist = [hist => process_hist(output_hist_el, hist, temp_canvas_el)]
     // react to img/video src change fired by multiple methods
     callbacks.img_src = [img_src => set_img_src(img_src, output_img_el, output_video_el, input_playback_rate_el, input_loop_el)]
     callbacks.video_src = [video_src => set_video_src(video_src, output_img_el, output_video_el, input_playback_rate_el, input_loop_el)]
@@ -850,25 +764,10 @@ function main() {
     document.ondrop = ev => load_drop(ev, input_file_el, input_url_el, submit_fetch_el)
     // react to the original src load
     // note that we remember which one we did last so that we can repeat it when stage config changes
-    output_img_el.onload = () => save_load(() => load_img(
-        output_img_el, output_initial_el,
-        temp_canvas_el, temp_canvas_ctx,
-        output_img_el.width, output_img_el.height,
-        output_hist_el, output_initial_hist_el,
-        output_original_width_el, output_original_height_el, output_actual_fps_el))
-    output_video_el.onloadeddata = () => save_load(() => load_img(
-        output_video_el, output_initial_el,
-        temp_canvas_el, temp_canvas_ctx,
-        output_video_el.clientWidth, output_video_el.clientHeight,
-        output_hist_el, output_initial_hist_el,
-        output_original_width_el, output_original_height_el, output_actual_fps_el))
+    output_img_el.onload = () => save_load(callback_load_img)
+    output_video_el.onloadeddata = () => save_load(callback_load_video)
     // also react to the user seeking to a new time in video
-    output_video_el.onseeked = () => load_img(
-        output_video_el, output_initial_el,
-        temp_canvas_el, temp_canvas_ctx,
-        output_video_el.clientWidth, output_video_el.clientHeight,
-        output_hist_el, output_initial_hist_el,
-        output_original_width_el, output_original_height_el, output_actual_fps_el)
+    output_video_el.onseeked = callback_load_video
     // fire element changes to initialize and sync internal state
     load_play(output_video_el)
     change(input_file_el)
@@ -887,11 +786,12 @@ function main() {
     const input_channel_el = document.getElementById("input-channel")
     const input_fps_el = document.getElementById("input-fps")
     const input_initial_hist_el = document.getElementById("input-initial-hist")
-    callbacks.width = [() => state.load?.()]
-    callbacks.height = [() => state.load?.()]
-    callbacks.color_space = [() => state.load?.()]
-    callbacks.channel = [() => state.load?.()]
-    callbacks.initial_hist = [initial_hist => set_initial_hist(initial_hist, output_initial_hist_el)]
+    const callback_load = () => state.load?.()
+    callbacks.width = [callback_load]
+    callbacks.height = [callback_load]
+    callbacks.color_space = [callback_load]
+    callbacks.channel = [callback_load]
+    callbacks.initial_hist = [initial_hist => process_hist(output_initial_hist_el, initial_hist, state.mat_initial)]
     // enable fps only for video
     // note that this is monitered in set_play
     callbacks.img_src.push(() => input_fps_el.disabled = true)
@@ -930,20 +830,24 @@ function main() {
     const input_sigma_color_el = document.getElementById("input-sigma-color")
     const input_sigma_space_el = document.getElementById("input-sigma-space")
     const input_blur_hist_el = document.getElementById("input-blur-hist")
-    callbacks.mat_initial = [() => blur_img(output_blur_el, output_blur_hist_el)]
+    const callback_blur = () => process_img(
+        output_blur_el, output_blur_hist_el,
+        "blur", "blur_hist", "mat_initial", "mat_blur",
+        blur_img)
+    callbacks.mat_initial = [callback_blur]
     callbacks.blur = [blur => set_blur(
-        blur, output_blur_el, output_blur_hist_el,
+        blur,
         input_blur_kernel_width_el, input_blur_kernel_height_el, input_blur_kernel_size_el, input_blur_diameter_el,
-        input_sigma_x_el, input_sigma_y_el, input_sigma_color_el, input_sigma_space_el)]
-    callbacks.blur_kernel_width = [() => blur_img(output_blur_el, output_blur_hist_el)]
-    callbacks.blur_kernel_height = [() => blur_img(output_blur_el, output_blur_hist_el)]
-    callbacks.blur_kernel_size = [() => blur_img(output_blur_el, output_blur_hist_el)]
-    callbacks.blur_diameter = [() => blur_img(output_blur_el, output_blur_hist_el)]
-    callbacks.sigma_x = [() => blur_img(output_blur_el, output_blur_hist_el)]
-    callbacks.sigma_y = [() => blur_img(output_blur_el, output_blur_hist_el)]
-    callbacks.sigma_color = [() => blur_img(output_blur_el, output_blur_hist_el)]
-    callbacks.sigma_space = [() => blur_img(output_blur_el, output_blur_hist_el)]
-    callbacks.blur_hist = [blur_hist => set_blur_hist(blur_hist, output_blur_el, output_blur_hist_el)]
+        input_sigma_x_el, input_sigma_y_el, input_sigma_color_el, input_sigma_space_el), callback_blur]
+    callbacks.blur_kernel_width = [callback_blur]
+    callbacks.blur_kernel_height = [callback_blur]
+    callbacks.blur_kernel_size = [callback_blur]
+    callbacks.blur_diameter = [callback_blur]
+    callbacks.sigma_x = [callback_blur]
+    callbacks.sigma_y = [callback_blur]
+    callbacks.sigma_color = [callback_blur]
+    callbacks.sigma_space = [callback_blur]
+    callbacks.blur_hist = [blur_hist => process_hist(output_blur_hist_el, blur_hist, state.mat_blur)]
     input_blur_el.onchange = get_check_set_load("blur")
     input_blur_kernel_width_el.onchange = get_check_set_load("blur_kernel_width", parseInt)
     input_blur_kernel_height_el.onchange = get_check_set_load("blur_kernel_height", parseInt)
@@ -974,14 +878,18 @@ function main() {
     const input_equalization_rows_el = document.getElementById("input-equalization-rows")
     const input_equalization_columns_el = document.getElementById("input-equalization-columns")
     const input_equalization_hist_el = document.getElementById("input-equalization-hist")
-    callbacks.mat_blur = [() => equalize_img(output_equalization_el, output_equalization_hist_el)]
+    const callback_equalization = () => process_img(
+        output_equalization_el, output_equalization_hist_el,
+        "equalization", "equalization_hist", "mat_blur", "mat_equalization",
+        equalize_img)
+    callbacks.mat_blur = [callback_equalization]
     callbacks.equalization = [equalization => set_equalization(
-        equalization, output_equalization_el, output_equalization_hist_el,
-        input_equalization_clip_el, input_equalization_rows_el, input_equalization_columns_el)]
-    callbacks.equalization_clip = [() => equalize_img(output_equalization_el, output_equalization_hist_el)]
-    callbacks.equalization_rows = [() => equalize_img(output_equalization_el, output_equalization_hist_el)]
-    callbacks.equalization_columns = [() => equalize_img(output_equalization_el, output_equalization_hist_el)]
-    callbacks.equalization_hist = [equalization_hist => set_equalization_hist(equalization_hist, output_equalization_el, output_equalization_hist_el)]
+        equalization,
+        input_equalization_clip_el, input_equalization_rows_el, input_equalization_columns_el), callback_equalization]
+    callbacks.equalization_clip = [callback_equalization]
+    callbacks.equalization_rows = [callback_equalization]
+    callbacks.equalization_columns = [callback_equalization]
+    callbacks.equalization_hist = [equalization_hist => process_hist(output_equalization_hist_el, equalization_hist, state.mat_equalization)]
     input_equalization_el.onchange = get_check_set_load("equalization")
     input_equalization_clip_el.onchange = get_check_set_load("equalization_clip", parseInt)
     input_equalization_rows_el.onchange = get_check_set_load("equalization_rows", parseInt)
@@ -1005,27 +913,24 @@ function main() {
     const input_threshold_block_el = document.getElementById("input-threshold-block")
     const input_threshold_constant_el = document.getElementById("input-threshold-constant")
     const input_threshold_hist_el = document.getElementById("input-threshold-hist")
-    callbacks.mat_equalization = [() => threshold_img(output_threshold_el, output_threshold_hist_el)]
-    callbacks.threshold = [threshold => set_threshold(
-        threshold, output_threshold_el, output_threshold_hist_el,
+    const callback_threshold = () => process_img(
+        output_threshold_el, output_threshold_hist_el,
+        "threshold", "threshold_hist", "mat_equalization", "mat_threshold",
+        threshold_img)
+    const callback_set_threshold = threshold => set_threshold(
+        threshold,
         input_threshold_value_el, input_threshold_max_el,
         input_optimal_threshold_el, input_adaptive_threshold_el,
-        input_threshold_block_el, input_threshold_constant_el)]
-    callbacks.threshold_value = [() => threshold_img(output_threshold_el, output_threshold_hist_el)]
-    callbacks.threshold_max = [() => threshold_img(output_threshold_el, output_threshold_hist_el)]
-    callbacks.optimal_threshold = [() => set_threshold(
-        state.threshold, output_threshold_el, output_threshold_hist_el,
-        input_threshold_value_el, input_threshold_max_el,
-        input_optimal_threshold_el, input_adaptive_threshold_el,
-        input_threshold_block_el, input_threshold_constant_el)]
-    callbacks.adaptive_threshold = [() => set_threshold(
-        state.threshold, output_threshold_el, output_threshold_hist_el,
-        input_threshold_value_el, input_threshold_max_el,
-        input_optimal_threshold_el, input_adaptive_threshold_el,
-        input_threshold_block_el, input_threshold_constant_el)]
-    callbacks.threshold_block = [() => threshold_img(output_threshold_el, output_threshold_hist_el)]
-    callbacks.threshold_constant = [() => threshold_img(output_threshold_el, output_threshold_hist_el)]
-    callbacks.threshold_hist = [threshold_hist => set_threshold_hist(threshold_hist, output_threshold_el, output_threshold_hist_el)]
+        input_threshold_block_el, input_threshold_constant_el)
+    callbacks.mat_equalization = [callback_threshold]
+    callbacks.threshold = [callback_set_threshold, callback_threshold]
+    callbacks.threshold_value = [callback_threshold]
+    callbacks.threshold_max = [callback_threshold]
+    callbacks.optimal_threshold = [() => callback_set_threshold(state.threshold), callback_threshold]
+    callbacks.adaptive_threshold = [() => callback_set_threshold(state.threshold), callback_threshold]
+    callbacks.threshold_block = [callback_threshold]
+    callbacks.threshold_constant = [callback_threshold]
+    callbacks.threshold_hist = [threshold_hist => process_hist(output_threshold_hist_el, threshold_hist, state.mat_threshold)]
     input_threshold_el.onchange = get_check_set_load("threshold")
     input_threshold_value_el.onchange = get_check_set_load("threshold_value", parseInt)
     input_threshold_max_el.onchange = get_check_set_load("threshold_max", parseInt)
@@ -1054,17 +959,21 @@ function main() {
     const input_canny_l2_el = document.getElementById("input-canny-l2")
     const input_contours_mode_el = document.getElementById("input-contours-mode")
     const input_canny_hist_el = document.getElementById("input-canny-hist")
-    callbacks.mat_threshold = [() => canny_img(output_canny_el, output_canny_hist_el)]
+    const callback_canny = () => process_img(
+        output_canny_el, output_canny_hist_el,
+        "canny", "canny_hist", "mat_threshold", "mat_canny",
+        canny_img)
+    callbacks.mat_threshold = [callback_canny]
     callbacks.canny = [canny => set_canny(
-        canny, output_canny_el, output_canny_hist_el,
+        canny,
         input_canny_min_el, input_canny_max_el,
-        input_canny_sobel_el, input_canny_l2_el)]
-    callbacks.canny_min = [() => canny_img(output_canny_el, output_canny_hist_el)]
-    callbacks.canny_max = [() => canny_img(output_canny_el, output_canny_hist_el)]
-    callbacks.canny_sobel = [() => canny_img(output_canny_el, output_canny_hist_el)]
-    callbacks.canny_l2 = [() => canny_img(output_canny_el, output_canny_hist_el)]
-    callbacks.contours_mode = [() => canny_img(output_canny_el, output_canny_hist_el)]
-    callbacks.canny_hist = [canny_hist => set_canny_hist(canny_hist, output_canny_el, output_canny_hist_el)]
+        input_canny_sobel_el, input_canny_l2_el), callback_canny]
+    callbacks.canny_min = [callback_canny]
+    callbacks.canny_max = [callback_canny]
+    callbacks.canny_sobel = [callback_canny]
+    callbacks.canny_l2 = [callback_canny]
+    callbacks.contours_mode = [callback_canny]
+    callbacks.canny_hist = [canny_hist => process_hist(output_canny_hist_el, canny_hist, state.mat_canny)]
     input_canny_el.onchange = get_check_set_load("canny", identity, get_checked)
     input_canny_min_el.onchange = get_check_set_load("canny_min", parseInt)
     input_canny_max_el.onchange = get_check_set_load("canny_max", parseInt)
@@ -1095,23 +1004,27 @@ function main() {
     const input_hough_min_length_el = document.getElementById("input-hough-min-length")
     const input_hough_max_gap_el = document.getElementById("input-hough-max-gap")
     const input_hough_hist_el = document.getElementById("input-hough-hist")
-    callbacks.mat_canny = [() => hough_img(output_hough_el, output_hough_hist_el)]
+    const callback_hough = () => process_img(
+        output_hough_el, output_hough_hist_el,
+        "hough", "hough_hist", "mat_canny", "mat_hough",
+        hough_img)
+    callbacks.mat_canny = [callback_hough]
     callbacks.hough = [hough => set_hough(
-        hough, output_hough_el, output_hough_hist_el,
+        hough,
         input_hough_rho_el, input_hough_theta_el, input_hough_threshold_el,
         input_hough_srn_el, input_hough_stn_el,
         input_hough_theta_min_el, input_hough_theta_max_el,
-        input_hough_min_length_el, input_hough_max_gap_el)]
-    callbacks.hough_rho = [() => hough_img(output_hough_el, output_hough_hist_el)]
-    callbacks.hough_theta = [() => hough_img(output_hough_el, output_hough_hist_el)]
-    callbacks.hough_threshold = [() => hough_img(output_hough_el, output_hough_hist_el)]
-    callbacks.hough_srn = [() => hough_img(output_hough_el, output_hough_hist_el)]
-    callbacks.hough_stn = [() => hough_img(output_hough_el, output_hough_hist_el)]
-    callbacks.hough_theta_min = [() => hough_img(output_hough_el, output_hough_hist_el)]
-    callbacks.hough_theta_max = [() => hough_img(output_hough_el, output_hough_hist_el)]
-    callbacks.hough_min_length = [() => hough_img(output_hough_el, output_hough_hist_el)]
-    callbacks.hough_max_gap = [() => hough_img(output_hough_el, output_hough_hist_el)]
-    callbacks.hough_hist = [hough_hist => set_hough_hist(hough_hist, output_hough_el, output_hough_hist_el)]
+        input_hough_min_length_el, input_hough_max_gap_el), callback_hough]
+    callbacks.hough_rho = [callback_hough]
+    callbacks.hough_theta = [callback_hough]
+    callbacks.hough_threshold = [callback_hough]
+    callbacks.hough_srn = [callback_hough]
+    callbacks.hough_stn = [callback_hough]
+    callbacks.hough_theta_min = [callback_hough]
+    callbacks.hough_theta_max = [callback_hough]
+    callbacks.hough_min_length = [callback_hough]
+    callbacks.hough_max_gap = [callback_hough]
+    callbacks.hough_hist = [hough_hist => process_hist(output_hough_hist_el, hough_hist, state.mat_hough)]
     input_hough_el.onchange = get_check_set_load("hough")
     input_hough_rho_el.onchange = get_check_set_load("hough_rho", parseInt)
     input_hough_theta_el.onchange = get_check_set_load("hough_theta", parseInt)
