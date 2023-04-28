@@ -684,6 +684,117 @@ function set_canny(
 
 
 
+// stage 7 - hough lines
+
+
+
+
+
+// hough image
+function hough_img(dst_el, hist_el) {
+    // check if we have previous stage
+    if (!state.mat_canny) return
+    // allocate dst if we hough, else clone
+    const mat_hough = state.hough ? new cv.Mat() : state.mat_canny.clone()
+    try {
+        if (state.hough) exec_channels(state.mat_canny, mat_hough, (src, dst) => {
+            dst.create(src.rows, src.cols, cv.CV_8UC1)
+            dst.setTo(new cv.Scalar(0))
+            const color = new cv.Scalar(255)
+            const lines = new cv.Mat()
+            try {
+                if (state.hough == "HoughLines") {
+                    cv.HoughLines(
+                        src, lines, state.hough_rho, state.hough_theta * Math.PI / 180, state.hough_threshold,
+                        state.hough_srn, state.hough_stn, state.hough_theta_min, state.hough_theta_max)
+                    let line = lines.rows * 2
+                    while ((line -= 2) >= 0) {
+                        const rho = lines.data32F[line]
+                        const theta = lines.data32F[line + 1]
+                        const a = Math.cos(theta)
+                        const b = Math.sin(theta)
+                        const x = a * rho
+                        const y = b * rho
+                        cv.line(
+                            dst, new cv.Point(Math.floor(x - 1000 * b), Math.floor(y + 1000 * a)),
+                            new cv.Point(Math.floor(x + 1000 * b), Math.floor(y - 1000 * a)), color)
+                    }
+                } else {
+                    cv.HoughLinesP(
+                        src, lines, state.hough_rho, state.hough_theta * Math.PI / 180, state.hough_threshold,
+                        state.hough_min_length, state.hough_max_gap)
+                    let line = lines.rows * 4
+                    while ((line -= 4) >= 0) cv.line(
+                        dst, new cv.Point(lines.data32S[line], lines.data32S[line + 1]),
+                        new cv.Point(lines.data32S[line + 2], lines.data32S[line + 3]), color)
+                }
+            } finally {
+                lines.delete()
+            }
+        })
+        // show new and plot histogram
+        cv.imshow(dst_el, mat_hough)
+        if (state.hough_hist) plot_hist(mat_hough, hist_el)
+    } catch (exc) {
+        // failed, delete new
+        mat_hough.delete()
+        throw exc
+    }
+    // delete previous and set new
+    if (state.mat_hough) state.mat_hough.delete()
+    state.mat_hough = mat_hough
+}
+
+
+// generate histogram
+function set_hough_hist(hough_hist, output_hough_el, output_hough_hist_el) {
+    // hide based on value and reload if histogram is required
+    output_hough_hist_el.hidden = !hough_hist
+    if (hough_hist) hough_img(output_hough_el, output_hough_hist_el)
+}
+
+
+// switch inputs
+function set_hough(
+    hough, output_hough_el, output_hough_hist_el,
+    input_hough_rho_el, input_hough_theta_el, input_hough_threshold_el,
+    input_hough_srn_el, input_hough_stn_el,
+    input_hough_theta_min_el, input_hough_theta_max_el,
+    input_hough_min_length_el, input_hough_max_gap_el) {
+    input_hough_rho_el.disabled = true
+    input_hough_theta_el.disabled = true
+    input_hough_threshold_el.disabled = true
+    input_hough_srn_el.disabled = true
+    input_hough_stn_el.disabled = true
+    input_hough_theta_min_el.disabled = true
+    input_hough_theta_max_el.disabled = true
+    input_hough_min_length_el.disabled = true
+    input_hough_max_gap_el.disabled = true
+    switch (hough) {
+        case "HoughLines":
+            input_hough_rho_el.disabled = false
+            input_hough_theta_el.disabled = false
+            input_hough_threshold_el.disabled = false
+            input_hough_srn_el.disabled = false
+            input_hough_stn_el.disabled = false
+            input_hough_theta_min_el.disabled = false
+            input_hough_theta_max_el.disabled = false
+            break
+        case "HoughLinesP":
+            input_hough_rho_el.disabled = false
+            input_hough_theta_el.disabled = false
+            input_hough_threshold_el.disabled = false
+            input_hough_min_length_el.disabled = false
+            input_hough_max_gap_el.disabled = false
+            break
+    }
+    hough_img(output_hough_el, output_hough_hist_el)
+}
+
+
+
+
+
 // initialization
 
 
@@ -968,6 +1079,61 @@ function main() {
     change(input_canny_l2_el)
     change(input_contours_mode_el)
     change(input_canny_hist_el)
+    //
+    // stage 7 - hough lines
+    //
+    const output_hough_el = document.getElementById("output-hough")
+    const output_hough_hist_el = document.getElementById("output-hough-hist")
+    const input_hough_el = document.getElementById("input-hough")
+    const input_hough_rho_el = document.getElementById("input-hough-rho")
+    const input_hough_theta_el = document.getElementById("input-hough-theta")
+    const input_hough_threshold_el = document.getElementById("input-hough-threshold")
+    const input_hough_srn_el = document.getElementById("input-hough-srn")
+    const input_hough_stn_el = document.getElementById("input-hough-stn")
+    const input_hough_theta_min_el = document.getElementById("input-hough-theta-min")
+    const input_hough_theta_max_el = document.getElementById("input-hough-theta-max")
+    const input_hough_min_length_el = document.getElementById("input-hough-min-length")
+    const input_hough_max_gap_el = document.getElementById("input-hough-max-gap")
+    const input_hough_hist_el = document.getElementById("input-hough-hist")
+    callbacks.mat_canny = [() => hough_img(output_hough_el, output_hough_hist_el)]
+    callbacks.hough = [hough => set_hough(
+        hough, output_hough_el, output_hough_hist_el,
+        input_hough_rho_el, input_hough_theta_el, input_hough_threshold_el,
+        input_hough_srn_el, input_hough_stn_el,
+        input_hough_theta_min_el, input_hough_theta_max_el,
+        input_hough_min_length_el, input_hough_max_gap_el)]
+    callbacks.hough_rho = [() => hough_img(output_hough_el, output_hough_hist_el)]
+    callbacks.hough_theta = [() => hough_img(output_hough_el, output_hough_hist_el)]
+    callbacks.hough_threshold = [() => hough_img(output_hough_el, output_hough_hist_el)]
+    callbacks.hough_srn = [() => hough_img(output_hough_el, output_hough_hist_el)]
+    callbacks.hough_stn = [() => hough_img(output_hough_el, output_hough_hist_el)]
+    callbacks.hough_theta_min = [() => hough_img(output_hough_el, output_hough_hist_el)]
+    callbacks.hough_theta_max = [() => hough_img(output_hough_el, output_hough_hist_el)]
+    callbacks.hough_min_length = [() => hough_img(output_hough_el, output_hough_hist_el)]
+    callbacks.hough_max_gap = [() => hough_img(output_hough_el, output_hough_hist_el)]
+    callbacks.hough_hist = [hough_hist => set_hough_hist(hough_hist, output_hough_el, output_hough_hist_el)]
+    input_hough_el.onchange = get_check_set_load("hough")
+    input_hough_rho_el.onchange = get_check_set_load("hough_rho", parseInt)
+    input_hough_theta_el.onchange = get_check_set_load("hough_theta", parseInt)
+    input_hough_threshold_el.onchange = get_check_set_load("hough_threshold", parseInt)
+    input_hough_srn_el.onchange = get_check_set_load("hough_srn", parseInt)
+    input_hough_stn_el.onchange = get_check_set_load("hough_stn", parseInt)
+    input_hough_theta_min_el.onchange = get_check_set_load("hough_theta_min", parseFloat)
+    input_hough_theta_max_el.onchange = get_check_set_load("hough_theta_max", parseFloat)
+    input_hough_min_length_el.onchange = get_check_set_load("hough_min_length", parseInt)
+    input_hough_max_gap_el.onchange = get_check_set_load("hough_max_gap", parseInt)
+    input_hough_hist_el.onchange = get_check_set_load("hough_hist", identity, get_checked)
+    change(input_hough_el)
+    change(input_hough_rho_el)
+    change(input_hough_theta_el)
+    change(input_hough_threshold_el)
+    change(input_hough_srn_el)
+    change(input_hough_stn_el)
+    change(input_hough_theta_min_el)
+    change(input_hough_theta_max_el)
+    change(input_hough_min_length_el)
+    change(input_hough_max_gap_el)
+    change(input_hough_hist_el)
 }
 
 

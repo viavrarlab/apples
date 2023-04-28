@@ -459,6 +459,110 @@
                     <input id="input-canny-hist" type="checkbox" />
                 </td>
             </tr>
+            <!-- stage 7 - hough lines -->
+            <tr class="short">
+                <td rowspan="11">
+                    <canvas id="output-hough"></canvas>
+                </td>
+                <td rowspan="11">
+                    <canvas id="output-hough-hist" hidden="true"></canvas>
+                </td>
+                <td class="right">
+                    <label for="input-hough">Hough line detection - </label>
+                </td>
+                <td>
+                    <select id="input-hough">
+                        <option value="" selected="true">No line detection</option>
+                        <option value="HoughLines">HoughLines</option>
+                        <option value="HoughLinesP">HoughLinesP</option>
+                    </select>
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-hough-rho">Rho - </label>
+                </td>
+                <td>
+                    <input id="input-hough-rho" type="number" value="1" step="1" min="1" max="255" disabled="true" />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-hough-theta">Theta degrees - </label>
+                </td>
+                <td>
+                    <input id="input-hough-theta" type="number" value="1" step="1" min="1" max="360" disabled="true" />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-hough-threshold">Threshold - </label>
+                </td>
+                <td>
+                    <input id="input-hough-threshold" type="number" value="31" step="1" min="1" max="255"
+                        disabled="true" />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-hough-srn">Srn - </label>
+                </td>
+                <td>
+                    <input id="input-hough-srn" type="number" value="0" step="1" min="0" max="255" disabled="true" />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-hough-stn">Stn - </label>
+                </td>
+                <td>
+                    <input id="input-hough-stn" type="number" value="0" step="1" min="0" max="255" disabled="true" />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-hough-theta-min">Theta min - </label>
+                </td>
+                <td>
+                    <input id="input-hough-theta-min" type="number" value="0" step="0.01" min="0" max="3.14"
+                        disabled="true" />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-hough-theta-max">Theta max - </label>
+                </td>
+                <td>
+                    <input id="input-hough-theta-max" type="number" value="1" step="0.01" min="0" max="3.14"
+                        disabled="true" />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-hough-min-length">Min line length - </label>
+                </td>
+                <td>
+                    <input id="input-hough-min-length" type="number" value="0" step="1" min="0" max="255"
+                        disabled="true" />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-hough-max-gap">Max line gap - </label>
+                </td>
+                <td>
+                    <input id="input-hough-max-gap" type="number" value="0" step="1" min="0" max="255"
+                        disabled="true" />
+                </td>
+            </tr>
+            <tr>
+                <td class="right">
+                    <label for="input-hough-hist">Show histogram - </label>
+                </td>
+                <td>
+                    <input id="input-hough-hist" type="checkbox" />
+                </td>
+            </tr>
         </tbody>
     </table>
 </body>
