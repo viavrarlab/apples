@@ -183,6 +183,37 @@ function process_hist(hist_el, hist, mat) {
 
 
 
+// stream video from webcam
+async function set_stream(stream, img_el, video_el, canvas_el, canvas_ctx, input_playback_rate_el, input_loop_el, load_video) {
+    if (stream) {
+        // we need stream, grab webcam
+        video_el.srcObject = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        // hide img el
+        img_el.hidden = true
+        // disable video specific controls, these make no sense for stream
+        input_playback_rate_el.disabled = true
+        input_loop_el.disabled = true
+        // show video el
+        video_el.hidden = false
+        // load and play stream as video
+        save_load(load_video)
+        video_el.play()
+    } else if (video_el.srcObject) {
+        try {
+            // need to disable stream, adjust canvas and copy the current frame
+            canvas_el.width = video_el.clientWidth
+            canvas_el.height = video_el.clientHeight
+            canvas_ctx.drawImage(video_el, 0, 0, canvas_el.width, canvas_el.height)
+            // load that frame as image, note that callbacks should do the rest here
+            state.img_src = canvas_el.toDataURL()
+        } finally {
+            // potential fail, stop the stream anyway
+            video_el.srcObject.getTracks().forEach(track => track.stop())
+        }
+    }
+}
+
+
 // load image and video
 function load_src(src, type) {
     // src is already prepared, simply check type and set on internal state
@@ -216,11 +247,17 @@ function set_video_src(video_src, img_el, video_el, input_playback_rate_el, inpu
 
 
 // load from file and url
-function load_file(input_file_el) {
+function load_file(input_file_el, input_stream_el) {
     // check el and files and load the first
-    if (input_file_el.reportValidity() && input_file_el.files.length) load_src(input_file_el.files[0], input_file_el.files[0].type)
+    if (input_file_el.reportValidity() && input_file_el.files.length) {
+        // before load disable stream
+        input_stream_el.checked = false
+        change(input_stream_el)
+        // then load
+        load_src(input_file_el.files[0], input_file_el.files[0].type)
+    }
 }
-async function load_url(input_url_el, proxies) {
+async function load_url(input_url_el, input_stream_el, proxies) {
     // check el
     if (!input_url_el.reportValidity()) return
     // valid, grab and fetch url
@@ -246,7 +283,13 @@ async function load_url(input_url_el, proxies) {
         }
     }
     // check if we got response and load blob if so
-    if (response) load_src(await response.blob(), response.headers.get("Content-Type"))
+    if (response) {
+        // before load disable stream
+        input_stream_el.checked = false
+        change(input_stream_el)
+        // then load
+        load_src(await response.blob(), response.headers.get("Content-Type"))
+    }
 }
 
 
@@ -285,11 +328,12 @@ function save_load(load) {
 function load_img(
     src_el, dst_el, canvas_el, canvas_ctx, width, height, hist_el, initial_hist_el,
     output_original_width_el, output_original_height_el, output_actual_fps_el) {
-    // coalesce width and height
+    // coalesce and check width and height
     canvas_el.width = state.width
     canvas_el.width ||= width
     canvas_el.height = state.height
     canvas_el.height ||= height
+    if (!canvas_el.width || !canvas_el.height) return
     // resize and read new
     canvas_ctx.drawImage(src_el, 0, 0, canvas_el.width, canvas_el.height)
     let mat_initial = cv.imread(canvas_el)
@@ -715,6 +759,7 @@ function main() {
     const input_file_el = document.getElementById("input-file")
     const submit_fetch_el = document.getElementById("submit-fetch")
     const input_url_el = document.getElementById("input-url")
+    const input_stream_el = document.getElementById("input-stream")
     const input_playback_rate_el = document.getElementById("input-playback-rate")
     const input_loop_el = document.getElementById("input-loop")
     const input_hist_el = document.getElementById("input-hist")
@@ -745,6 +790,12 @@ function main() {
         output_original_width_el, output_original_height_el, output_actual_fps_el)
     // register callbacks to react to internal state changes
     callbacks.play = [play => set_play(play, output_actual_fps_el)]
+    callbacks.stream = [stream => set_stream(
+        stream,
+        output_img_el, output_video_el,
+        temp_canvas_el, temp_canvas_ctx,
+        input_playback_rate_el, input_loop_el,
+        callback_load_video)]
     callbacks.playback_rate = [playback_rate => output_video_el.playbackRate = playback_rate]
     callbacks.loop = [loop => output_video_el.loop = loop]
     callbacks.hist = [hist => process_hist(output_hist_el, hist, temp_canvas_el)]
@@ -754,8 +805,9 @@ function main() {
     // register callbacks to change internal state on element changes
     output_video_el.onplay = () => load_play(output_video_el)
     output_video_el.onpause = () => load_play(output_video_el)
-    input_file_el.onchange = () => load_file(input_file_el)
-    submit_fetch_el.onclick = () => load_url(input_url_el, proxies)
+    input_file_el.onchange = () => load_file(input_file_el, input_stream_el)
+    submit_fetch_el.onclick = () => load_url(input_url_el, input_stream_el, proxies)
+    input_stream_el.onchange = get_check_set_load("stream", identity, get_checked)
     input_playback_rate_el.onchange = get_check_set_load("playback_rate", parseFloat)
     input_loop_el.onchange = get_check_set_load("loop", identity, get_checked)
     input_hist_el.onchange = get_check_set_load("hist", identity, get_checked)
@@ -772,6 +824,7 @@ function main() {
     load_play(output_video_el)
     change(input_file_el)
     submit_fetch_el.click()
+    change(input_stream_el)
     change(input_playback_rate_el)
     change(input_loop_el)
     change(input_hist_el)
