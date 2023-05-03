@@ -556,6 +556,159 @@
                     <input id="input-hough-hist" type="checkbox" />
                 </td>
             </tr>
+            <!-- stage 8 - feature detection -->
+            <tr class="short">
+                <td rowspan="17">
+                    <canvas id="output-feat"></canvas>
+                </td>
+                <td rowspan="17">
+                    <canvas id="output-feat-hist" hidden></canvas>
+                </td>
+                <td class="right">
+                    <label for="input-feat">Detection method - </label>
+                </td>
+                <td>
+                    <select id="input-feat">
+                        <option value="" selected>No detection</option>
+                        <option value="cornerHarris">Harris</option>
+                        <option value="goodFeaturesToTrack">Shi-Tomasi</option>
+                        <option value="FastFeatureDetector">FAST</option>
+                        <option value="ORB">ORB</option>
+                    </select>
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-feat-block-size">Block size - </label>
+                </td>
+                <td>
+                    <input id="input-feat-block-size" type="number" value="2" step="1" min="2" max="256" disabled />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-feat-sobel-size">Sobel size - </label>
+                </td>
+                <td>
+                    <input id="input-feat-sobel-size" type="number" value="3" step="2" min="3" max="255" disabled />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-feat-k">K - </label>
+                </td>
+                <td>
+                    <input id="input-feat-k" type="number" value="0.04" step="0.01" min="0" max="2" disabled />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-feat-max">Max features - </label>
+                </td>
+                <td>
+                    <input id="input-feat-max" type="number" value="256" step="1" min="1" max="1024" disabled />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-feat-quality">Quality - </label>
+                </td>
+                <td>
+                    <input id="input-feat-quality" type="number" value="0.01" step="0.01" min="0" max="1" disabled />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-feat-min-distance">Min distance - </label>
+                </td>
+                <td>
+                    <input id="input-feat-min-distance" type="number" value="10" step="1" min="0" max="256" disabled />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-feat-method">Underlying method - </label>
+                </td>
+                <td>
+                    <select id="input-feat-method">
+                        <option value="cornerHarris" selected>cornerHarris</option>
+                        <option value="cornerMinEigenVal">cornerMinEigenVal</option>
+                    </select>
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-feat-threshold">Threshold - </label>
+                </td>
+                <td>
+                    <input id="input-feat-threshold" type="number" value="50" step="1" min="0" max="256" disabled />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-feat-suppression">Non max suppression - </label>
+                </td>
+                <td>
+                    <input id="input-feat-suppression" type="checkbox" checked disabled />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-feat-scale-factor">Scale factor - </label>
+                </td>
+                <td>
+                    <input id="input-feat-scale-factor" type="number" value="1.2" step="0.01" min="1" max="2"
+                        disabled />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-feat-levels">Levels - </label>
+                </td>
+                <td>
+                    <input id="input-feat-levels" type="number" value="8" step="1" min="1" max="32" disabled />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-feat-edge-size">Edge size - </label>
+                </td>
+                <td>
+                    <input id="input-feat-edge-size" type="number" value="32" step="1" min="0" max="2048" disabled />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-feat-first-level">First level - </label>
+                </td>
+                <td>
+                    <input id="input-feat-first-level" type="number" value="0" step="1" min="0" max="32" disabled />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-feat-wta-k">WTA K - </label>
+                </td>
+                <td>
+                    <input id="input-feat-wta-k" type="number" value="2" step="1" min="2" max="4" disabled />
+                </td>
+            </tr>
+            <tr class="short">
+                <td class="right">
+                    <label for="input-feat-patch-size">Patch size - </label>
+                </td>
+                <td>
+                    <input id="input-feat-patch-size" type="number" value="32" step="1" min="2" max="256" disabled />
+                </td>
+            </tr>
+            <tr>
+                <td class="right">
+                    <label for="input-feat-hist">Show histogram - </label>
+                </td>
+                <td>
+                    <input id="input-feat-hist" type="checkbox" />
+                </td>
+            </tr>
         </tbody>
     </table>
 </body>

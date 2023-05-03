@@ -76,7 +76,7 @@ function plot_hist(src_el, dst_el, rows = undefined, bins = 256, min = 0, max = 
         while (++channel < channels) {
             // calculate channel histogram and its bounds
             cv.calcHist(srcs, [channel], mask, hist, [bins], [min, max])
-            const bounds = cv.minMaxLoc(hist, mask)
+            const bounds = cv.minMaxLoc(hist)
             // calculate histogram plot floor height
             const floor = height * channel + height
             // loop bins
@@ -108,6 +108,28 @@ function plot_hist(src_el, dst_el, rows = undefined, bins = 256, min = 0, max = 
 }
 
 
+// opencv.js has no extractChannel, define it
+function extract_channel(src, dst, channel) {
+    // allocate channels
+    const srcs = new cv.MatVector()
+    try {
+        // split src and allocate temp
+        cv.split(src, srcs)
+        const temp = srcs.get(channel)
+        try {
+            // copy channel to dst
+            temp.copyTo(dst)
+        } finally {
+            // deallocate temp
+            temp.delete()
+        }
+    } finally {
+        // deallocate channels
+        srcs.delete()
+    }
+}
+
+
 // execute callback per channel
 function exec_channels(src, dst, callback) {
     // grab and check channels
@@ -123,33 +145,33 @@ function exec_channels(src, dst, callback) {
         while (++channel < channels) {
             // grab src and dst for channel
             const _src = srcs.get(channel)
-            const _dst = new cv.Mat()
+            const _dst = _src.clone()
             try {
                 // execute callback and save dst
                 callback(_src, _dst)
                 dsts.push_back(_dst)
             } finally {
                 // seems that vectors use protective copy, deallocate the ones we got
-                _src.delete()
                 _dst.delete()
+                _src.delete()
             }
         }
         // merge channels back
         if (dst) cv.merge(dsts, dst)
     } finally {
         // deallocate vectors
-        srcs.delete()
         dsts.delete()
+        srcs.delete()
     }
 }
 
 
 // execute image processing stage
-function process_img(dst_el, hist_el, check, check_hist, previous, next, process) {
+function process_img(dst_el, hist_el, check_hist, previous, next, process) {
     // check if we have previous stage
     if (!state[previous]) return
-    // allocate next if we process, else clone
-    let mat_next = state[check] ? new cv.Mat() : state[previous].clone()
+    // clone previous as next
+    let mat_next = state[previous].clone()
     try {
         mat_next = process(state[previous], mat_next)
         // show next and plot histogram
@@ -483,17 +505,22 @@ function set_blur(
 
 // equalize image
 function equalize_img(mat_previous, mat_next) {
-    if (state.equalization) {
-        if (state.equalization == "CLAHE") {
+    switch (state.equalization) {
+        case "CLAHE":
+            // allocate equalizer
             const clahe = new cv.CLAHE(state.equalization_clip, new cv.Size(state.equalization_columns, state.equalization_rows))
             try {
+                // equalize each channel
                 exec_channels(mat_previous, mat_next, (src, dst) => clahe.apply(src, dst))
             } finally {
+                // deallocate equalizer
                 clahe.delete()
             }
-        } else {
+            break
+        case "equalizeHist":
+            // equalize each channel
             exec_channels(mat_previous, mat_next, cv.equalizeHist)
-        }
+            break
     }
     return mat_next
 }
@@ -523,15 +550,18 @@ function set_equalization(
 function threshold_img(mat_previous, mat_next) {
     if (state.threshold) {
         if (state.adaptive_threshold) {
+            // adaptive
             exec_channels(mat_previous, mat_next, (src, dst) => cv.adaptiveThreshold(
                 src, dst, state.threshold_max,
                 cv[state.adaptive_threshold], cv[state.threshold],
                 state.threshold_block, state.threshold_constant))
         } else if (state.optimal_threshold) {
+            // optimal
             exec_channels(mat_previous, mat_next, (src, dst) => cv.threshold(
                 src, dst, state.threshold_value, state.threshold_max,
                 cv[state.threshold] | cv[state.optimal_threshold]))
         } else {
+            // simple
             cv.threshold(
                 mat_previous, mat_next, state.threshold_value, state.threshold_max,
                 cv[state.threshold])
@@ -615,8 +645,8 @@ function canny_img(mat_previous, mat_next) {
                         1, cv.LINE_8, hierarchy, 255)
                 } finally {
                     // deallocate contours and hierarchy
-                    contours.delete()
                     hierarchy.delete()
+                    contours.delete()
                 }
             })
             // swap mat_contours with mat_next
@@ -657,8 +687,7 @@ function set_canny(
 // hough image
 function hough_img(mat_previous, mat_next) {
     if (state.hough) exec_channels(mat_previous, mat_next, (src, dst) => {
-        // initialize dst and color since we draw manually
-        dst.create(src.rows, src.cols, cv.CV_8UC1)
+        // clear dst and initialize color since we draw manually
         dst.setTo(new cv.Scalar(0))
         const color = new cv.Scalar(255)
         // allocate lines and check hough
@@ -733,6 +762,156 @@ function set_hough(
             input_hough_threshold_el.disabled = false
             input_hough_min_length_el.disabled = false
             input_hough_max_gap_el.disabled = false
+            break
+    }
+}
+
+
+
+
+
+// stage 8 - feature detection
+
+
+
+
+
+// feat image
+function feat_img(mat_previous, mat_next) {
+    if (state.feat) exec_channels(mat_previous, mat_next, (src, dst) => {
+        switch (state.feat) {
+            case "cornerHarris":
+                // harris corner detection, returns weight mask
+                cv.cornerHarris(src, dst, state.feat_block_size, state.feat_sobel_size, state.feat_k)
+                // threshold the mask based on quality, it's effectively invisible otherwise
+                cv.threshold(dst, dst, state.feat_quality * cv.minMaxLoc(dst).maxVal, 255, cv.THRESH_BINARY)
+                break
+            case "goodFeaturesToTrack":
+                // shi-tomasi, allocate corners and mask
+                const corners = new cv.Mat()
+                const mask = new cv.Mat()
+                try {
+                    // find features
+                    cv.goodFeaturesToTrack(
+                        src, corners,
+                        state.feat_max, state.feat_quality, state.feat_min_distance,
+                        mask,
+                        state.feat_block_size, state.feat_method == "cornerHarris", state.feat_k)
+                    // draw features over dst
+                    const color = new cv.Scalar(255)
+                    let corner = corners.rows * 2
+                    while ((corner -= 2) >= 0) cv.circle(dst, new cv.Point(corners.data32F[corner], corners.data32F[corner + 1]), 3, color)
+                } finally {
+                    // deallocate corners and mask
+                    mask.delete()
+                    corners.delete()
+                }
+                break
+            case "FastFeatureDetector":
+                // fast, allocate detector, key points and temp
+                const fast = new cv.FastFeatureDetector()
+                const fast_points = new cv.KeyPointVector()
+                const fast_temp = new cv.Mat()
+                try {
+                    // configure and detect
+                    fast.setThreshold(state.feat_threshold)
+                    fast.setNonmaxSuppression(state.feat_suppression)
+                    fast.detect(src, fast_points)
+                    // draw features in temp, note that drawKeypoints results in rgb, whereas we need single channel, therefore extract it
+                    cv.drawKeypoints(src, fast_points, fast_temp, new cv.Scalar(255, 0, 0))
+                    extract_channel(fast_temp, dst, 0)
+                } finally {
+                    // deallocate detector, key points and temp
+                    fast_temp.delete()
+                    fast_points.delete()
+                    fast.delete()
+                }
+                break
+            case "ORB":
+                // orb, allocate detector, key points and temp
+                const orb = new cv.ORB()
+                const orb_points = new cv.KeyPointVector()
+                const orb_temp = new cv.Mat()
+                try {
+                    // configure and detect
+                    orb.setMaxFeatures(state.feat_max)
+                    orb.setScaleFactor(state.feat_scale_factor)
+                    orb.setNLevels(state.feat_levels)
+                    orb.setEdgeThreshold(state.feat_edge_size)
+                    orb.setFirstLevel(state.feat_first_level)
+                    orb.setWTA_K(state.feat_wta_k)
+                    orb.setPatchSize(state.feat_patch_size)
+                    orb.setFastThreshold(state.feat_threshold)
+                    orb.detect(src, orb_points)
+                    // draw features in temp, note that drawKeypoints results in rgb, whereas we need single channel, therefore extract it
+                    cv.drawKeypoints(src, orb_points, orb_temp, new cv.Scalar(255, 0, 0))
+                    extract_channel(orb_temp, dst, 0)
+                } finally {
+                    // deallocate detector, key points and temp
+                    orb_temp.delete()
+                    orb_points.delete()
+                    orb.delete()
+                }
+                break
+        }
+    })
+    return mat_next
+}
+
+
+// switch inputs
+function set_feat(
+    feat,
+    input_feat_block_size_el, input_feat_sobel_size_el,
+    input_feat_k_el, input_feat_max_el, input_feat_quality_el,
+    input_feat_min_distance_el, input_feat_method_el,
+    input_feat_threshold_el, input_feat_suppression_el,
+    input_feat_scale_factor_el, input_feat_levels_el,
+    input_feat_edge_size_el, input_feat_first_level_el,
+    input_feat_wta_k_el, input_feat_patch_size_el) {
+    input_feat_block_size_el.disabled = true
+    input_feat_sobel_size_el.disabled = true
+    input_feat_k_el.disabled = true
+    input_feat_max_el.disabled = true
+    input_feat_quality_el.disabled = true
+    input_feat_min_distance_el.disabled = true
+    input_feat_method_el.disabled = true
+    input_feat_threshold_el.disabled = true
+    input_feat_suppression_el.disabled = true
+    input_feat_scale_factor_el.disabled = true
+    input_feat_levels_el.disabled = true
+    input_feat_edge_size_el.disabled = true
+    input_feat_first_level_el.disabled = true
+    input_feat_wta_k_el.disabled = true
+    input_feat_patch_size_el.disabled = true
+    switch (feat) {
+        case "cornerHarris":
+            input_feat_block_size_el.disabled = false
+            input_feat_sobel_size_el.disabled = false
+            input_feat_k_el.disabled = false
+            input_feat_quality_el.disabled = false
+            break
+        case "goodFeaturesToTrack":
+            input_feat_block_size_el.disabled = false
+            input_feat_k_el.disabled = false
+            input_feat_max_el.disabled = false
+            input_feat_quality_el.disabled = false
+            input_feat_min_distance_el.disabled = false
+            input_feat_method_el.disabled = false
+            break
+        case "FastFeatureDetector":
+            input_feat_threshold_el.disabled = false
+            input_feat_suppression_el.disabled = false
+            break
+        case "ORB":
+            input_feat_max_el.disabled = false
+            input_feat_scale_factor_el.disabled = false
+            input_feat_levels_el.disabled = false
+            input_feat_edge_size_el.disabled = false
+            input_feat_first_level_el.disabled = false
+            input_feat_wta_k_el.disabled = false
+            input_feat_patch_size_el.disabled = false
+            input_feat_threshold_el.disabled = false
             break
     }
 }
@@ -862,6 +1041,8 @@ function main() {
         input_color_space_option_el.innerHTML = key.slice(6)
         input_color_space_el.appendChild(input_color_space_option_el)
     })
+    // should be available, effectively get rid of alpha
+    input_color_space_el.value = "COLOR_RGBA2RGB"
     change(input_width_el)
     change(input_height_el)
     change(input_color_space_el)
@@ -885,7 +1066,7 @@ function main() {
     const input_blur_hist_el = document.getElementById("input-blur-hist")
     const callback_blur = () => process_img(
         output_blur_el, output_blur_hist_el,
-        "blur", "blur_hist", "mat_initial", "mat_blur",
+        "blur_hist", "mat_initial", "mat_blur",
         blur_img)
     callbacks.mat_initial = [callback_blur]
     callbacks.blur = [blur => set_blur(
@@ -933,7 +1114,7 @@ function main() {
     const input_equalization_hist_el = document.getElementById("input-equalization-hist")
     const callback_equalization = () => process_img(
         output_equalization_el, output_equalization_hist_el,
-        "equalization", "equalization_hist", "mat_blur", "mat_equalization",
+        "equalization_hist", "mat_blur", "mat_equalization",
         equalize_img)
     callbacks.mat_blur = [callback_equalization]
     callbacks.equalization = [equalization => set_equalization(
@@ -968,7 +1149,7 @@ function main() {
     const input_threshold_hist_el = document.getElementById("input-threshold-hist")
     const callback_threshold = () => process_img(
         output_threshold_el, output_threshold_hist_el,
-        "threshold", "threshold_hist", "mat_equalization", "mat_threshold",
+        "threshold_hist", "mat_equalization", "mat_threshold",
         threshold_img)
     const callback_set_threshold = threshold => set_threshold(
         threshold,
@@ -1014,7 +1195,7 @@ function main() {
     const input_canny_hist_el = document.getElementById("input-canny-hist")
     const callback_canny = () => process_img(
         output_canny_el, output_canny_hist_el,
-        "canny", "canny_hist", "mat_threshold", "mat_canny",
+        "canny_hist", "mat_threshold", "mat_canny",
         canny_img)
     callbacks.mat_threshold = [callback_canny]
     callbacks.canny = [canny => set_canny(
@@ -1059,7 +1240,7 @@ function main() {
     const input_hough_hist_el = document.getElementById("input-hough-hist")
     const callback_hough = () => process_img(
         output_hough_el, output_hough_hist_el,
-        "hough", "hough_hist", "mat_canny", "mat_hough",
+        "hough_hist", "mat_canny", "mat_hough",
         hough_img)
     callbacks.mat_canny = [callback_hough]
     callbacks.hough = [hough => set_hough(
@@ -1100,6 +1281,92 @@ function main() {
     change(input_hough_min_length_el)
     change(input_hough_max_gap_el)
     change(input_hough_hist_el)
+    //
+    // stage 8 - feature detection
+    //
+    const output_feat_el = document.getElementById("output-feat")
+    const output_feat_hist_el = document.getElementById("output-feat-hist")
+    const input_feat_el = document.getElementById("input-feat")
+    const input_feat_block_size_el = document.getElementById("input-feat-block-size")
+    const input_feat_sobel_size_el = document.getElementById("input-feat-sobel-size")
+    const input_feat_k_el = document.getElementById("input-feat-k")
+    const input_feat_max_el = document.getElementById("input-feat-max")
+    const input_feat_quality_el = document.getElementById("input-feat-quality")
+    const input_feat_min_distance_el = document.getElementById("input-feat-min-distance")
+    const input_feat_method_el = document.getElementById("input-feat-method")
+    const input_feat_threshold_el = document.getElementById("input-feat-threshold")
+    const input_feat_suppression_el = document.getElementById("input-feat-suppression")
+    const input_feat_scale_factor_el = document.getElementById("input-feat-scale-factor")
+    const input_feat_levels_el = document.getElementById("input-feat-levels")
+    const input_feat_edge_size_el = document.getElementById("input-feat-edge-size")
+    const input_feat_first_level_el = document.getElementById("input-feat-first-level")
+    const input_feat_wta_k_el = document.getElementById("input-feat-wta-k")
+    const input_feat_patch_size_el = document.getElementById("input-feat-patch-size")
+    const input_feat_hist_el = document.getElementById("input-feat-hist")
+    const callback_feat = () => process_img(
+        output_feat_el, output_feat_hist_el,
+        "feat_hist", "mat_hough", "mat_feat",
+        feat_img)
+    callbacks.mat_hough = [callback_feat]
+    callbacks.feat = [feat => set_feat(
+        feat,
+        input_feat_block_size_el, input_feat_sobel_size_el,
+        input_feat_k_el, input_feat_max_el, input_feat_quality_el,
+        input_feat_min_distance_el, input_feat_method_el,
+        input_feat_threshold_el, input_feat_suppression_el,
+        input_feat_scale_factor_el, input_feat_levels_el,
+        input_feat_edge_size_el, input_feat_first_level_el,
+        input_feat_wta_k_el, input_feat_patch_size_el), callback_feat]
+    callbacks.feat_block_size = [callback_feat]
+    callbacks.feat_sobel_size = [callback_feat]
+    callbacks.feat_k = [callback_feat]
+    callbacks.feat_max = [callback_feat]
+    callbacks.feat_quality = [callback_feat]
+    callbacks.feat_min_distance = [callback_feat]
+    callbacks.feat_method = [callback_feat]
+    callbacks.feat_threshold = [callback_feat]
+    callbacks.feat_suppression = [callback_feat]
+    callbacks.feat_scale_factor = [callback_feat]
+    callbacks.feat_levels = [callback_feat]
+    callbacks.feat_edge_size = [callback_feat]
+    callbacks.feat_first_level = [callback_feat]
+    callbacks.feat_wta_k = [callback_feat]
+    callbacks.feat_patch_size = [callback_feat]
+    callbacks.feat_hist = [feat_hist => process_hist(output_feat_hist_el, feat_hist, state.mat_feat)]
+    input_feat_el.onchange = get_check_set_load("feat")
+    input_feat_block_size_el.onchange = get_check_set_load("feat_block_size", parseInt)
+    input_feat_sobel_size_el.onchange = get_check_set_load("feat_sobel_size", parseInt)
+    input_feat_k_el.onchange = get_check_set_load("feat_k", parseFloat)
+    input_feat_max_el.onchange = get_check_set_load("feat_max", parseInt)
+    input_feat_quality_el.onchange = get_check_set_load("feat_quality", parseFloat)
+    input_feat_min_distance_el.onchange = get_check_set_load("feat_min_distance", parseInt)
+    input_feat_method_el.onchange = get_check_set_load("feat_method")
+    input_feat_threshold_el.onchange = get_check_set_load("feat_threshold", parseInt)
+    input_feat_suppression_el.onchange = get_check_set_load("feat_suppression", identity, get_checked)
+    input_feat_scale_factor_el.onchange = get_check_set_load("feat_scale_factor", parseFloat)
+    input_feat_levels_el.onchange = get_check_set_load("feat_levels", parseInt)
+    input_feat_edge_size_el.onchange = get_check_set_load("feat_edge_size", parseInt)
+    input_feat_first_level_el.onchange = get_check_set_load("feat_first_level", parseInt)
+    input_feat_wta_k_el.onchange = get_check_set_load("feat_wta_k", parseInt)
+    input_feat_patch_size_el.onchange = get_check_set_load("feat_patch_size", parseInt)
+    input_feat_hist_el.onchange = get_check_set_load("feat_hist", identity, get_checked)
+    change(input_feat_el)
+    change(input_feat_block_size_el)
+    change(input_feat_sobel_size_el)
+    change(input_feat_k_el)
+    change(input_feat_max_el)
+    change(input_feat_quality_el)
+    change(input_feat_min_distance_el)
+    change(input_feat_method_el)
+    change(input_feat_threshold_el)
+    change(input_feat_suppression_el)
+    change(input_feat_scale_factor_el)
+    change(input_feat_levels_el)
+    change(input_feat_edge_size_el)
+    change(input_feat_first_level_el)
+    change(input_feat_wta_k_el)
+    change(input_feat_patch_size_el)
+    change(input_feat_hist_el)
 }
 
 
