@@ -130,11 +130,52 @@ function extract_channel(src, dst, channel) {
 }
 
 
+// opencv.js has no findNonZero, define it
+function find_non_zero(src, dst) {
+    // allocate temp
+    const temp = new cv.Mat(src.rows * src.cols, 1, cv.CV_32FC2)
+    try {
+        // track non zero count and loop pixels
+        let non_zero = 0
+        let row = src.rows
+        while (row--) {
+            let col = src.cols
+            while (col--) {
+                // check pixel
+                if (!src.data32F[src.cols * row + col]) continue
+                // non zero, add to temp
+                temp.data32F[non_zero++] = col
+                temp.data32F[non_zero++] = row
+            }
+        }
+        // copy if we found something
+        if (non_zero) temp.rowRange(0, Math.floor(non_zero / 2)).copyTo(dst)
+    } finally {
+        // deallocate temp
+        temp.delete()
+    }
+}
+
+
+// opencv.js has no KeyPoint.convert, define it
+function convert_points(points, dst) {
+    // grab size, allocate dst and loop
+    let point = points.size()
+    dst.create(point, 1, cv.CV_32FC2)
+    while (point--) {
+        // grab point and copy coords
+        let temp = points.get(point).pt
+        dst.data32F[point * 2] = temp.x
+        dst.data32F[point * 2 + 1] = temp.y
+    }
+}
+
+
 // execute callback per channel
 function exec_channels(src, dst, callback) {
     // grab and check channels
     const channels = src.channels()
-    if (channels == 1) return callback(src, dst)
+    if (channels == 1) return callback(src, dst, 0)
     // got multiple channels, initialize vectors
     const srcs = new cv.MatVector()
     const dsts = new cv.MatVector()
@@ -148,7 +189,7 @@ function exec_channels(src, dst, callback) {
             const _dst = _src.clone()
             try {
                 // execute callback and save dst
-                callback(_src, _dst)
+                callback(_src, _dst, channel)
                 dsts.push_back(_dst)
             } finally {
                 // seems that vectors use protective copy, deallocate the ones we got
@@ -413,7 +454,7 @@ function set_play(play, output_actual_fps_el) {
             state.load()
             // calculate delta and show actual fps
             const delta = performance.now() - start
-            output_actual_fps_el.innerHTML = 1000 / delta
+            output_actual_fps_el.innerHTML = state.fps ? Math.min(1000 / delta, state.fps) : 1000 / delta
             // calculate free time until next frame
             const free = state.fps > 0 ? 1000 / state.fps - delta : 0
             // schedule next callback if we're still playing
@@ -437,7 +478,6 @@ function set_play(play, output_actual_fps_el) {
 
 
 
-// blur image
 function blur_img(mat_previous, mat_next) {
     // blur based on type
     switch (state.blur) {
@@ -458,7 +498,6 @@ function blur_img(mat_previous, mat_next) {
 }
 
 
-// switch inputs
 function set_blur(
     blur,
     input_blur_kernel_width_el, input_blur_kernel_height_el, input_blur_kernel_size_el, input_blur_diameter_el,
@@ -503,7 +542,6 @@ function set_blur(
 
 
 
-// equalize image
 function equalize_img(mat_previous, mat_next) {
     switch (state.equalization) {
         case "CLAHE":
@@ -519,14 +557,13 @@ function equalize_img(mat_previous, mat_next) {
             break
         case "equalizeHist":
             // equalize each channel
-            exec_channels(mat_previous, mat_next, cv.equalizeHist)
+            exec_channels(mat_previous, mat_next, (src, dst) => cv.equalizeHist(src, dst))
             break
     }
     return mat_next
 }
 
 
-// switch inputs
 function set_equalization(
     equalization,
     input_equalization_clip_el, input_equalization_rows_el, input_equalization_columns_el) {
@@ -546,7 +583,6 @@ function set_equalization(
 
 
 
-// threshold image
 function threshold_img(mat_previous, mat_next) {
     if (state.threshold) {
         if (state.adaptive_threshold) {
@@ -571,7 +607,6 @@ function threshold_img(mat_previous, mat_next) {
 }
 
 
-// switch inputs
 function set_threshold(
     threshold,
     input_threshold_value_el, input_threshold_max_el,
@@ -621,7 +656,6 @@ function set_threshold(
 
 
 
-// canny image
 function canny_img(mat_previous, mat_next) {
     if (state.canny) exec_channels(
         mat_previous, mat_next,
@@ -662,7 +696,6 @@ function canny_img(mat_previous, mat_next) {
 }
 
 
-// switch inputs
 function set_canny(
     canny,
     input_canny_min_el, input_canny_max_el,
@@ -684,7 +717,6 @@ function set_canny(
 
 
 
-// hough image
 function hough_img(mat_previous, mat_next) {
     if (state.hough) exec_channels(mat_previous, mat_next, (src, dst) => {
         // clear dst and initialize color since we draw manually
@@ -700,7 +732,7 @@ function hough_img(mat_previous, mat_next) {
                     state.hough_srn, state.hough_stn, state.hough_theta_min, state.hough_theta_max)
                 let line = lines.rows * 2
                 while ((line -= 2) >= 0) {
-                    // draw line, see https://docs.opencv.org/3.4/d3/de6/tutorial_js_houghlines.html
+                    // draw line, see https://docs.opencv.org/4.7.0/d3/de6/tutorial_js_houghlines.html
                     const rho = lines.data32F[line]
                     const theta = lines.data32F[line + 1]
                     const a = Math.cos(theta)
@@ -730,7 +762,6 @@ function hough_img(mat_previous, mat_next) {
 }
 
 
-// switch inputs
 function set_hough(
     hough,
     input_hough_rho_el, input_hough_theta_el, input_hough_threshold_el,
@@ -776,19 +807,29 @@ function set_hough(
 
 
 
-// feat image
 function feat_img(mat_previous, mat_next) {
-    if (state.feat) exec_channels(mat_previous, mat_next, (src, dst) => {
+    // check feat and return
+    if (!state.feat) return mat_next
+    // check feat_points and initialize
+    if (!state.feat_points) state.feat_points = []
+    // grab channels and min from channels and feat_points
+    const channels = mat_previous.channels()
+    let channel = Math.min(channels, state.feat_points.length)
+    // allocate missing, note that these are never deallocated
+    while (channel++ < channels) state.feat_points.push(new cv.Mat())
+    exec_channels(mat_previous, mat_next, (src, dst, channel) => {
         switch (state.feat) {
             case "cornerHarris":
                 // harris corner detection, returns weight mask
                 cv.cornerHarris(src, dst, state.feat_block_size, state.feat_sobel_size, state.feat_k)
                 // threshold the mask based on quality, it's effectively invisible otherwise
                 cv.threshold(dst, dst, state.feat_quality * cv.minMaxLoc(dst).maxVal, 255, cv.THRESH_BINARY)
+                // convert corners to coords for flow
+                find_non_zero(dst, state.feat_points[channel])
                 break
             case "goodFeaturesToTrack":
-                // shi-tomasi, allocate corners and mask
-                const corners = new cv.Mat()
+                // shi-tomasi, grab corners and allocate mask
+                const corners = state.feat_points[channel]
                 const mask = new cv.Mat()
                 try {
                     // find features
@@ -802,9 +843,8 @@ function feat_img(mat_previous, mat_next) {
                     let corner = corners.rows * 2
                     while ((corner -= 2) >= 0) cv.circle(dst, new cv.Point(corners.data32F[corner], corners.data32F[corner + 1]), 3, color)
                 } finally {
-                    // deallocate corners and mask
+                    // deallocate mask, note that we keep corners
                     mask.delete()
-                    corners.delete()
                 }
                 break
             case "FastFeatureDetector":
@@ -820,6 +860,8 @@ function feat_img(mat_previous, mat_next) {
                     // draw features in temp, note that drawKeypoints results in rgb, whereas we need single channel, therefore extract it
                     cv.drawKeypoints(src, fast_points, fast_temp, new cv.Scalar(255, 0, 0))
                     extract_channel(fast_temp, dst, 0)
+                    // convert key points to coords for flow
+                    convert_points(fast_points, state.feat_points[channel])
                 } finally {
                     // deallocate detector, key points and temp
                     fast_temp.delete()
@@ -846,6 +888,8 @@ function feat_img(mat_previous, mat_next) {
                     // draw features in temp, note that drawKeypoints results in rgb, whereas we need single channel, therefore extract it
                     cv.drawKeypoints(src, orb_points, orb_temp, new cv.Scalar(255, 0, 0))
                     extract_channel(orb_temp, dst, 0)
+                    // convert key points to coords for flow
+                    convert_points(orb_points, state.feat_points[channel])
                 } finally {
                     // deallocate detector, key points and temp
                     orb_temp.delete()
@@ -859,7 +903,6 @@ function feat_img(mat_previous, mat_next) {
 }
 
 
-// switch inputs
 function set_feat(
     feat,
     input_feat_block_size_el, input_feat_sobel_size_el,
@@ -912,6 +955,183 @@ function set_feat(
             input_feat_wta_k_el.disabled = false
             input_feat_patch_size_el.disabled = false
             input_feat_threshold_el.disabled = false
+            break
+    }
+}
+
+
+
+
+
+// stage 9 - optical flow
+
+
+
+
+
+function flow_img(mat_previous, mat_next) {
+    // check flow and clear
+    if (!state.flow) {
+        if (state.mat_flow_previous) {
+            // got previous, deallocate and clear
+            state.mat_flow_previous.delete()
+            state.mat_flow_previous = undefined
+        }
+        // deallocate masks and return
+        while (state.flow_masks?.length) state.flow_masks.pop().delete()
+        return mat_next
+    }
+    // check and initialize
+    if (!state.mat_flow_previous) {
+        // allocate and split channels
+        state.mat_flow_previous = new cv.MatVector()
+        cv.split(mat_previous, state.mat_flow_previous)
+        // note that we return after initialization since we need at least two images
+        return mat_next
+    }
+    // check and initialize
+    if (!state.flow_masks) state.flow_masks = []
+    // grab channels and min from channels and masks
+    const channels = mat_previous.channels()
+    let channel = Math.min(channels, state.flow_masks.length)
+    // allocate missing masks
+    while (channel++ < channels) state.flow_masks.push(new cv.Mat.zeros(mat_previous.rows, mat_previous.cols, cv.CV_8UC1))
+    // check and exec farneback
+    if (state.flow == "calcOpticalFlowFarneback") exec_channels(mat_previous, mat_next, (src, dst, channel) => {
+        // grab corresponding channel from previous
+        const src_previous = state.mat_flow_previous.get(channel)
+        try {
+            // calculate flow
+            cv.calcOpticalFlowFarneback(
+                src_previous, src,
+                dst,
+                state.flow_scale, state.flow_levels,
+                state.flow_window_size, state.flow_iterations,
+                state.flow_poly_n, state.flow_poly_sigma,
+                state.flow_gaussian ? cv.OPTFLOW_FARNEBACK_GAUSSIAN : 0)
+            // allocate channels and split
+            const channels = new cv.MatVector()
+            try {
+                cv.split(dst, channels)
+                // grab x and y
+                const x = channels.get(0)
+                const y = channels.get(1)
+                // allocate angle and magnitude
+                const angle = new cv.Mat()
+                const magnitude = new cv.Mat()
+                // allocate mat for multiplication, it seems that simple scalar doesn't work
+                const mul = new cv.Mat(src.rows, src.cols, cv.CV_32FC1)
+                mul.setTo(new cv.Scalar((1 / 360) * (180 / 255)))
+                try {
+                    // convert x and y to angle and magnitude, see https://docs.opencv.org/4.7.0/d4/dee/tutorial_optical_flow.html
+                    cv.cartToPolar(x, y, magnitude, angle, true)
+                    cv.normalize(magnitude, magnitude, 0, 1, cv.NORM_MINMAX)
+                    cv.multiply(angle, mul, angle)
+                    // we can display only a single channel
+                    const flow = state.flow_layer == "magnitude" ? magnitude : angle
+                    flow.copyTo(dst)
+                } finally {
+                    // deallocate all
+                    mul.delete()
+                    magnitude.delete()
+                    angle.delete()
+                    y.delete()
+                    x.delete()
+                }
+            } finally {
+                // deallocate channels
+                channels.delete()
+            }
+        } finally {
+            // deallocate defensive copy
+            src_previous.delete()
+        }
+    })
+    // no farneback, check and exec lucas-kanade, note that we also need feat_points
+    else if (state.flow == "calcOpticalFlowPyrLK" && state.feat_points) exec_channels(mat_previous, mat_next, (src, dst, channel) => {
+        // color for manual drawing
+        const color = new cv.Scalar(255)
+        // grab corresponding mask and points
+        const mask = state.flow_masks[channel]
+        const points_previous = state.feat_points[channel]
+        // allocate new points for tracking
+        const points = new cv.Mat()
+        // grab corresponding channel from previous
+        const src_previous = state.mat_flow_previous.get(channel)
+        // allocate status and error, note that error is unused
+        const status = new cv.Mat()
+        const error = new cv.Mat()
+        try {
+            // calculate flow
+            cv.calcOpticalFlowPyrLK(
+                src_previous, src,
+                points_previous, points,
+                status, error,
+                new cv.Size(state.flow_window_size, state.flow_window_size),
+                state.flow_levels - 1)
+            // count and loop points
+            let ok = -1
+            let point = -1
+            while (++point < points.rows) {
+                // check if we lost track
+                if (!status.data[point]) {
+                    // we did, mark the last known location
+                    cv.circle(mask, new cv.Point(points_previous.data32F[point * 2], points_previous.data32F[point * 2 + 1]), 3, color)
+                    continue
+                }
+                // still on track, draw trace
+                cv.line(
+                    mask, new cv.Point(points_previous.data32F[point * 2], points_previous.data32F[point * 2 + 1]),
+                    new cv.Point(points.data32F[point * 2], points.data32F[point * 2 + 1]), color)
+                // compress new points if we lost track at any point, note that this way we'll lose all our points eventually
+                if (++ok != point) points.row(point).copyTo(points.row(ok))
+            }
+            // copy compressed points if we have track of any
+            if (++ok) points.rowRange(0, ok).copyTo(points_previous)
+            // draw traces over image
+            cv.bitwise_or(dst, mask, dst)
+        } finally {
+            // deallocate all
+            error.delete()
+            status.delete()
+            src_previous.delete()
+            points.delete()
+        }
+    })
+    // save for next frame
+    cv.split(mat_previous, state.mat_flow_previous)
+    return mat_next
+}
+
+
+function set_flow(
+    flow,
+    input_flow_scale_el, input_flow_levels_el,
+    input_flow_window_size_el, input_flow_iterations_el,
+    input_flow_poly_n_el, input_flow_poly_sigma_el,
+    input_flow_gaussian_el, input_flow_layer_el) {
+    input_flow_scale_el.disabled = true
+    input_flow_levels_el.disabled = true
+    input_flow_window_size_el.disabled = true
+    input_flow_iterations_el.disabled = true
+    input_flow_poly_n_el.disabled = true
+    input_flow_poly_sigma_el.disabled = true
+    input_flow_gaussian_el.disabled = true
+    input_flow_layer_el.disabled = true
+    switch (flow) {
+        case "calcOpticalFlowFarneback":
+            input_flow_scale_el.disabled = false
+            input_flow_levels_el.disabled = false
+            input_flow_window_size_el.disabled = false
+            input_flow_iterations_el.disabled = false
+            input_flow_poly_n_el.disabled = false
+            input_flow_poly_sigma_el.disabled = false
+            input_flow_gaussian_el.disabled = false
+            input_flow_layer_el.disabled = false
+            break
+        case "calcOpticalFlowPyrLK":
+            input_flow_levels_el.disabled = false
+            input_flow_window_size_el.disabled = false
             break
     }
 }
@@ -1367,6 +1587,61 @@ function main() {
     change(input_feat_wta_k_el)
     change(input_feat_patch_size_el)
     change(input_feat_hist_el)
+    //
+    // stage 9 - optical flow
+    //
+    const output_flow_el = document.getElementById("output-flow")
+    const output_flow_hist_el = document.getElementById("output-flow-hist")
+    const input_flow_el = document.getElementById("input-flow")
+    const input_flow_scale_el = document.getElementById("input-flow-scale")
+    const input_flow_levels_el = document.getElementById("input-flow-levels")
+    const input_flow_window_size_el = document.getElementById("input-flow-window-size")
+    const input_flow_iterations_el = document.getElementById("input-flow-iterations")
+    const input_flow_poly_n_el = document.getElementById("input-flow-poly-n")
+    const input_flow_poly_sigma_el = document.getElementById("input-flow-poly-sigma")
+    const input_flow_gaussian_el = document.getElementById("input-flow-gaussian")
+    const input_flow_layer_el = document.getElementById("input-flow-layer")
+    const input_flow_hist_el = document.getElementById("input-flow-hist")
+    const callback_flow = () => process_img(
+        output_flow_el, output_flow_hist_el,
+        "flow_hist", "mat_feat", "mat_flow",
+        flow_img)
+    callbacks.mat_feat = [callback_flow]
+    callbacks.flow = [flow => set_flow(
+        flow,
+        input_flow_scale_el, input_flow_levels_el,
+        input_flow_window_size_el, input_flow_iterations_el,
+        input_flow_poly_n_el, input_flow_poly_sigma_el,
+        input_flow_gaussian_el, input_flow_layer_el), callback_flow]
+    callbacks.flow_scale = [callback_flow]
+    callbacks.flow_levels = [callback_flow]
+    callbacks.flow_window_size = [callback_flow]
+    callbacks.flow_iterations = [callback_flow]
+    callbacks.flow_poly_n = [callback_flow]
+    callbacks.flow_poly_sigma = [callback_flow]
+    callbacks.flow_gaussian = [callback_flow]
+    callbacks.flow_layer = [callback_flow]
+    callbacks.flow_hist = [flow_hist => process_hist(output_flow_hist_el, flow_hist, state.mat_flow)]
+    input_flow_el.onchange = get_check_set_load("flow")
+    input_flow_scale_el.onchange = get_check_set_load("flow_scale", parseFloat)
+    input_flow_levels_el.onchange = get_check_set_load("flow_levels", parseInt)
+    input_flow_window_size_el.onchange = get_check_set_load("flow_window_size", parseInt)
+    input_flow_iterations_el.onchange = get_check_set_load("flow_iterations", parseInt)
+    input_flow_poly_n_el.onchange = get_check_set_load("flow_poly_n", parseInt)
+    input_flow_poly_sigma_el.onchange = get_check_set_load("flow_poly_sigma", parseFloat)
+    input_flow_gaussian_el.onchange = get_check_set_load("flow_gaussian", identity, get_checked)
+    input_flow_layer_el.onchange = get_check_set_load("flow_layer")
+    input_flow_hist_el.onchange = get_check_set_load("flow_hist", identity, get_checked)
+    change(input_flow_el)
+    change(input_flow_scale_el)
+    change(input_flow_levels_el)
+    change(input_flow_window_size_el)
+    change(input_flow_iterations_el)
+    change(input_flow_poly_n_el)
+    change(input_flow_poly_sigma_el)
+    change(input_flow_gaussian_el)
+    change(input_flow_layer_el)
+    change(input_flow_hist_el)
 }
 
 
