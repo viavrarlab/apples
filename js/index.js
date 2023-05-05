@@ -7,7 +7,7 @@ const callbacks = {}
 // internal state of the app
 const state = new Proxy({}, {
     // intercept property set
-    set: (obj, key, value) => {
+    set: async (obj, key, value) => {
         // change property only if there's a difference
         if (obj[key] == value) return true
         // log and change property
@@ -15,7 +15,7 @@ const state = new Proxy({}, {
         obj[key] = value
         // invoke callbacks and return
         try {
-            if (key in callbacks) callbacks[key].forEach(callback => callback(value))
+            if (key in callbacks) for (const callback of callbacks[key]) await callback(value)
         } catch (exc) {
             window.alert(`Not all combinations of options will work, some will fail, like this one - ${exc.toString()}`)
             throw exc
@@ -208,13 +208,13 @@ function exec_channels(src, dst, callback) {
 
 
 // execute image processing stage
-function process_img(dst_el, hist_el, check_hist, previous, next, process) {
+async function process_img(dst_el, hist_el, check_hist, previous, next, process) {
     // check if we have previous stage
     if (!state[previous]) return
     // clone previous as next
     let mat_next = state[previous].clone()
     try {
-        mat_next = process(state[previous], mat_next)
+        mat_next = await process(state[previous], mat_next)
         // show next and plot histogram
         cv.imshow(dst_el, mat_next)
         if (state[check_hist]) plot_hist(mat_next, hist_el)
@@ -1140,6 +1140,62 @@ function set_flow(
 
 
 
+// stage 10 - classification
+
+
+
+
+
+async function classification_img(mat_previous, mat_next) {
+    if (!state.classification) return mat_next
+    const size = new cv.Size(320, 224)
+    const channels = new cv.MatVector()
+    try {
+        cv.resize(mat_previous, mat_next, size)
+        cv.split(mat_next, channels)
+        cv.vconcat(channels, mat_next)
+        const input = new ort.Tensor("float32", Float32Array.from(mat_next.data), [3, size.height, size.width])
+        const output = await state.classification_model.run({ "image": input })
+        mat_previous.copyTo(mat_next)
+        const factor_width = mat_next.cols / size.width
+        const factor_height = mat_next.rows / size.height
+        const color = new cv.Scalar(255, 0, 0)
+        const bboxes = output["bbox"].data
+        const classes = output["class"].data
+        const confidences = output["confidence"].data
+        let index = -1
+        while (++index < classes.length) {
+            if (confidences[index] < 0.7) continue
+            const bbox = bboxes.slice(index * 4)
+            cv.putText(
+                mat_next, `${state.classification_labels[classes[index]]}: ${(confidences[index] * 100).toFixed(2)}%`,
+                new cv.Point(bbox[0] * factor_width + 10, bbox[3] * factor_height - 10), cv.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+            cv.rectangle(
+                mat_next, new cv.Point(bbox[0] * factor_width, bbox[1] * factor_height),
+                new cv.Point(bbox[2] * factor_width, bbox[3] * factor_height), color, 1)
+        }
+    } finally {
+        channels.delete()
+    }
+    return mat_next
+}
+
+
+async function set_classification(classification, input_classification_threshold_el) {
+    input_classification_threshold_el.disabled = !classification
+    if (!classification) return
+    state.classification_model = await ort.InferenceSession.create(classification)
+    switch (classification) {
+        case "model.onnx":
+            state.classification_labels = ["fresh-apple", "damaged-apple", "weed"]
+            break
+    }
+}
+
+
+
+
+
 // initialization
 
 
@@ -1642,6 +1698,28 @@ function main() {
     change(input_flow_gaussian_el)
     change(input_flow_layer_el)
     change(input_flow_hist_el)
+    //
+    // stage 10 - classification
+    //
+    const output_classification_el = document.getElementById("output-classification")
+    const output_classification_hist_el = document.getElementById("output-classification-hist")
+    const input_classification_el = document.getElementById("input-classification")
+    const input_classification_threshold_el = document.getElementById("input-classification-threshold")
+    const input_classification_hist_el = document.getElementById("input-classification-hist")
+    const callback_classification = () => process_img(
+        output_classification_el, output_classification_hist_el,
+        "classification_hist", "mat_flow", "mat_classification",
+        classification_img)
+    callbacks.mat_flow = [callback_classification]
+    callbacks.classification = [classification => set_classification(classification, input_classification_threshold_el), callback_classification]
+    callbacks.classification_threshold = [callback_classification]
+    callbacks.classification_hist = [classification_hist => process_hist(output_classification_hist_el, classification_hist, state.mat_classification)]
+    input_classification_el.onchange = get_check_set_load("classification")
+    input_classification_threshold_el.onchange = get_check_set_load("classification_threshold", parseFloat)
+    input_classification_hist_el.onchange = get_check_set_load("classification_hist", identity, get_checked)
+    change(input_classification_el)
+    change(input_classification_threshold_el)
+    change(input_classification_hist_el)
 }
 
 
