@@ -1148,33 +1148,43 @@ function set_flow(
 
 async function classification_img(mat_previous, mat_next) {
     if (!state.classification) return mat_next
+    // need classification, initialize size and allocate channels
     const size = new cv.Size(320, 224)
     const channels = new cv.MatVector()
     try {
+        // resize to match training size
         cv.resize(mat_previous, mat_next, size)
+        // split and stack channels to match training shape
         cv.split(mat_next, channels)
         cv.vconcat(channels, mat_next)
+        // load data to tensor and run model
         const input = new ort.Tensor("float32", Float32Array.from(mat_next.data), [3, size.height, size.width])
         const output = await state.classification_model.run({ "image": input })
+        // reset mat_next
         mat_previous.copyTo(mat_next)
+        // initialize scaling and color for manual drawing
         const factor_width = mat_next.cols / size.width
         const factor_height = mat_next.rows / size.height
         const color = new cv.Scalar(255, 0, 0)
+        // grab classification data and loop
         const bboxes = output["bbox"].data
         const classes = output["class"].data
         const confidences = output["confidence"].data
         let index = -1
         while (++index < classes.length) {
-            if (confidences[index] < 0.7) continue
+            // check classification confidence
+            if (confidences[index] < state.classification_threshold) continue
+            // confident enough, scale and draw text and bbox
             const bbox = bboxes.slice(index * 4)
             cv.putText(
                 mat_next, `${state.classification_labels[classes[index]]}: ${(confidences[index] * 100).toFixed(2)}%`,
-                new cv.Point(bbox[0] * factor_width + 10, bbox[3] * factor_height - 10), cv.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+                new cv.Point(bbox[0] * factor_width + 10, bbox[3] * factor_height - 10), cv.FONT_HERSHEY_SIMPLEX, 1, color, 2)
             cv.rectangle(
                 mat_next, new cv.Point(bbox[0] * factor_width, bbox[1] * factor_height),
-                new cv.Point(bbox[2] * factor_width, bbox[3] * factor_height), color, 1)
+                new cv.Point(bbox[2] * factor_width, bbox[3] * factor_height), color, 2)
         }
     } finally {
+        // deallocate channels
         channels.delete()
     }
     return mat_next
@@ -1184,10 +1194,18 @@ async function classification_img(mat_previous, mat_next) {
 async function set_classification(classification, input_classification_threshold_el) {
     input_classification_threshold_el.disabled = !classification
     if (!classification) return
+    // got classification, load model
     state.classification_model = await ort.InferenceSession.create(classification)
+    // and set respective labels
     switch (classification) {
-        case "model.onnx":
+        case "apples.onnx":
+            state.classification_labels = ["fresh-apple", "damaged-apple"]
+            break
+        case "both.onnx":
             state.classification_labels = ["fresh-apple", "damaged-apple", "weed"]
+            break
+        case "weeds.onnx":
+            state.classification_labels = ["weed"]
             break
     }
 }

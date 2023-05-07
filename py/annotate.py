@@ -21,7 +21,7 @@ def on_click(event, x, y, _, userdata):
     else:
         return
     if cls:
-        cv.line(userdata[2][0], cls[-1], (x, y), color, 3)
+        cv.line(userdata[2][0], cls[-1], (x, y), color, 2)
         cv.imshow("bgr", userdata[2][0])
     cls.append((x, y))
 
@@ -32,7 +32,7 @@ data = {}
 
 def draw(cls, color):
     for xy, zw in zip(cls, cls[1:]):
-        cv.line(userdata[2][0], xy, zw, color, 3)
+        cv.line(userdata[2][0], xy, zw, color, 2)
 
 
 def get_annotations(id, classes):

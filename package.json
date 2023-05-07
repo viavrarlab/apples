@@ -24,7 +24,9 @@
   "staticFiles": {
     "staticPath": [
       "node_modules/onnxruntime-web/dist/ort-wasm-simd.wasm",
-      "output/qat_faster_rcnn_fbnetv3a_C4_both/model.onnx"
+      "output/apples.onnx",
+      "output/both.onnx",
+      "output/weeds.onnx"
     ]
   }
 }
