@@ -22,7 +22,7 @@ from d2go.utils.testing.data_loader_helper import create_detection_data_loader_o
 from d2go.utils.demo_predictor import DemoPredictor
 
 
-import hook
+from py import hook
 
 
 setup_logger()
@@ -35,7 +35,7 @@ CFG_NAME = "qat_faster_rcnn_fbnetv3a_C4"
 ADD_SEGMENTATION = True
 TRAIN = True
 TEST = True
-EXPORT = True
+EXPORT = True and not TRAIN
 
 
 for dataset in DATASETS:
@@ -81,7 +81,7 @@ cfg.SOLVER.MAX_ITER = 10000
 cfg.SOLVER.CHECKPOINT_PERIOD = 500
 cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = 512
 cfg.MODEL.ROI_HEADS.NUM_CLASSES = len(THING_CLASSES)
-cfg.TEST.EVAL_PERIOD = 100
+cfg.TEST.EVAL_PERIOD = 200
 
 
 cfg.MODEL.WEIGHTS = os.path.join(cfg.OUTPUT_DIR, "last_checkpoint")
